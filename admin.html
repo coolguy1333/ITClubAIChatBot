@@ -166,7 +166,7 @@
     <div class="card" onclick="openModal('modal-discord')">
       <div class="card-top"><div class="card-icon">💬</div><div class="card-edit">✎</div></div>
       <div class="card-title">Discord Behavior</div>
-      <div class="card-desc">Officer ID, channels, wake-word and auto-react rules.</div>
+      <div class="card-desc">Officer ID, channels, and wake-word rules.</div>
     </div>
     <div class="card" onclick="openModal('modal-voice')">
       <div class="card-top"><div class="card-icon">🎙️</div><div class="card-edit">✎</div></div>
@@ -289,15 +289,10 @@
       <div class="checkline"><input type="checkbox" id="discord_onlyHomeChannels"><label for="discord_onlyHomeChannels">Only talk in home text channel</label></div>
       <div class="checkline"><input type="checkbox" id="discord_autoJoinVoice"><label for="discord_autoJoinVoice">Auto-join home voice channel</label></div>
       <div class="checkline"><input type="checkbox" id="discord_respondToName"><label for="discord_respondToName">Respond when "steve" is said</label></div>
-      <div class="checkline"><input type="checkbox" id="discord_replyToAllDMs"><label for="discord_replyToAllDMs">Reply to DMs from anyone</label></div>
-      <div class="checkline"><input type="checkbox" id="discord_autoReactEnabled"><label for="discord_autoReactEnabled">Auto-react to chat buzz</label></div>
+      <div class="checkline"><input type="checkbox" id="discord_replyToAllDMs"><label for="discord_replyToAllDMs">Reply to DMs from anyone <span class="hint">(off = only the officer's DMs)</span></label></div>
       <div class="checkline"><input type="checkbox" id="discord_speakTextRepliesInVoice"><label for="discord_speakTextRepliesInVoice">Speak text-channel replies aloud in voice <span class="hint">(off = voice only speaks actual voice-call replies)</span></label></div>
     </div>
     <div class="row">
-      <div>
-        <label>Auto-react every N messages</label>
-        <input type="number" id="discord_autoReactEveryMessages">
-      </div>
       <div>
         <label>Reply cooldown (seconds)</label>
         <input type="number" id="discord_replyCooldownSeconds">
@@ -428,10 +423,8 @@ async function loadConfig() {
   setChecked('discord_onlyHomeChannels', d.onlyHomeChannels);
   setChecked('discord_autoJoinVoice', d.autoJoinVoice);
   setChecked('discord_respondToName', d.respondToName !== false);
-  setChecked('discord_replyToAllDMs', d.replyToAllDMs);
-  setChecked('discord_autoReactEnabled', d.autoReactEnabled !== false);
+  setChecked('discord_replyToAllDMs', d.replyToAllDMs !== false);
   setChecked('discord_speakTextRepliesInVoice', d.speakTextRepliesInVoice);
-  set('discord_autoReactEveryMessages', d.autoReactEveryMessages ?? 6);
   set('discord_replyCooldownSeconds', d.replyCooldownSeconds ?? 8);
 
   setChecked('voice_requireWakeWord', v.requireWakeWord !== false);
@@ -479,9 +472,7 @@ async function saveConfig() {
       autoJoinVoice: checked('discord_autoJoinVoice'),
       respondToName: checked('discord_respondToName'),
       replyToAllDMs: checked('discord_replyToAllDMs'),
-      autoReactEnabled: checked('discord_autoReactEnabled'),
       speakTextRepliesInVoice: checked('discord_speakTextRepliesInVoice'),
-      autoReactEveryMessages: parseInt(val('discord_autoReactEveryMessages')) || 6,
       replyCooldownSeconds: parseInt(val('discord_replyCooldownSeconds')) || 8,
     },
     voice: {

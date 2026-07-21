@@ -1,8 +1,8 @@
 """Discord side of the companion.
 
-- DM the bot to talk with Steve privately (rolling memory).
-- In server channels it answers @mentions / its name, and can auto-chime
-  into community chatter every N messages.
+- DM the bot to talk with Steve privately (rolling memory, works for anyone).
+- In server channels it answers @mentions / its name, always attributing the
+  reply to whoever actually sent the message.
 - /join pulls Steve into a voice channel: he transcribes everyone with
   Vosk (local) and talks back with TTS.
 - Slash commands for everyone (/ask, /status, /help, /join, /leave,
@@ -13,7 +13,6 @@ import datetime
 import io
 import re
 import time
-from collections import deque
 
 import discord
 from discord import app_commands
@@ -83,8 +82,6 @@ def create_bot(state, brain, broadcaster):
     voice_mgr = VoiceManager(state, brain, broadcaster)
     bot.voice_mgr = voice_mgr
 
-    recent = {}       # channel_id -> deque of "user: text" for auto-react context
-    counters = {}     # channel_id -> messages since last auto-react
     last_reply = {}   # channel_id -> monotonic time of last bot reply
 
     def is_admin(user_id):
@@ -160,9 +157,9 @@ def create_bot(state, brain, broadcaster):
         # ---- Direct messages: private chat with Steve ----
         if isinstance(message.channel, discord.DMChannel):
             admin = is_admin(message.author.id)
-            if not admin and not dcfg.get("replyToAllDMs", False):
+            if not admin and not dcfg.get("replyToAllDMs", True):
                 return
-            who = dcfg.get("adminName", "an officer") if admin else message.author.display_name
+            who = message.author.display_name + (" (an officer)" if admin else "")
             prompt = f"[{who} says via Discord DM]: {text}"
             async with message.channel.typing():
                 reply = await brain.ask(f"dm:{message.author.id}", prompt,
@@ -172,8 +169,6 @@ def create_bot(state, brain, broadcaster):
 
         # ---- Server channels ----
         cid = message.channel.id
-        recent.setdefault(cid, deque(maxlen=8)).append(
-            f"{message.author.display_name}: {text}")
 
         mentioned = bot.user in message.mentions
         named = dcfg.get("respondToName", True) and NAME_RE.match(text)
@@ -188,8 +183,7 @@ def create_bot(state, brain, broadcaster):
                 return
             last_reply[cid] = time.monotonic()
             clean = re.sub(rf"<@!?{bot.user.id}>", "Steve", text).strip()
-            who = dcfg.get("adminName", "") if is_admin(message.author.id) \
-                else message.author.display_name
+            who = message.author.display_name + (" (an officer)" if is_admin(message.author.id) else "")
             prompt = f"[{who} says in Discord chat]: {clean}"
             async with message.channel.typing():
                 reply = await brain.ask(f"guild:{cid}", prompt,
@@ -199,28 +193,7 @@ def create_bot(state, brain, broadcaster):
                 await show_on_stream("discord", message.author.display_name, clean, reply)
                 if dcfg.get("speakTextRepliesInVoice", False):
                     voice_mgr.speak(message.guild.voice_client, reply)
-            counters[cid] = 0
             return
-
-        # ---- Community auto-react ----
-        if not dcfg.get("autoReactEnabled", True):
-            return
-        every = int(dcfg.get("autoReactEveryMessages", 6))
-        if every <= 0 or not channel_allowed(dcfg, cid):
-            return
-        counters[cid] = counters.get(cid, 0) + 1
-        if counters[cid] < every:
-            return
-        counters[cid] = 0
-        last_reply[cid] = time.monotonic()
-        buzz = "\n".join(recent[cid])
-        prompt = ("[Recent Discord community chat]\n" + buzz +
-                  "\n[React briefly to what the community is talking about, "
-                  "like a friend hanging out in the chat. Don't address anyone as 'user'.]")
-        reply = await brain.ask(f"guild:{cid}", prompt, "discord_auto", "community")
-        if reply:
-            await deliver_reply(message, dcfg, cid, reply, "steve", mention_reply=False)
-            await show_on_stream("discord", "community", "", reply)
 
     # ---------------- Slash commands ----------------
 
@@ -411,6 +384,7 @@ def create_bot(state, brain, broadcaster):
             await interaction.response.send_message("Officers only.", ephemeral=True)
             return
         value = scope.value if scope else "all"
+        n = brain.reset(None if value == "all" else value)
         label = scope.name if scope else "everything"
         await interaction.response.send_message(
             f"Cleared **{label}** — {n} conversation(s) wiped.", ephemeral=True)

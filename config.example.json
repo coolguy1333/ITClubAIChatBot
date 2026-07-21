@@ -41,10 +41,9 @@
     "chatChannelIds": [],
     "alwaysRespondChannelId": "",
     "threadReplyChannelIds": [],
+    "speakTextRepliesInVoice": false,
     "respondToName": true,
-    "replyToAllDMs": false,
-    "autoReactEnabled": true,
-    "autoReactEveryMessages": 6,
+    "replyToAllDMs": true,
     "replyCooldownSeconds": 8
   },
   "widget": {
