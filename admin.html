@@ -143,6 +143,9 @@
           <div class="meter-label"><span>Power draw</span><span id="hw_power_label">–</span></div>
           <div class="meter-track"><div id="hw_power_bar" class="meter-fill" style="width:0%"></div></div>
         </div>
+        <div class="meter">
+          <div class="meter-label"><span>Total energy used</span><span id="hw_energy_label">–</span></div>
+        </div>
       </div>
     </div>
     <div class="hw-note" id="hw_note"></div>
@@ -169,6 +172,11 @@
       <div class="card-top"><div class="card-icon">🎙️</div><div class="card-edit">✎</div></div>
       <div class="card-title">Voice & Wake Word</div>
       <div class="card-desc">Mic sensitivity, pause timing, and TTS rate.</div>
+    </div>
+    <div class="card" onclick="openModal('modal-web')">
+      <div class="card-top"><div class="card-icon">🌐</div><div class="card-edit">✎</div></div>
+      <div class="card-title">Web Access</div>
+      <div class="card-desc">Let Steve fetch links and search the web when asked.</div>
     </div>
     <div class="card" onclick="openModal('modal-secrets')">
       <div class="card-top"><div class="card-icon">🔒</div><div class="card-edit">✎</div></div>
@@ -283,6 +291,7 @@
       <div class="checkline"><input type="checkbox" id="discord_respondToName"><label for="discord_respondToName">Respond when "steve" is said</label></div>
       <div class="checkline"><input type="checkbox" id="discord_replyToAllDMs"><label for="discord_replyToAllDMs">Reply to DMs from anyone</label></div>
       <div class="checkline"><input type="checkbox" id="discord_autoReactEnabled"><label for="discord_autoReactEnabled">Auto-react to chat buzz</label></div>
+      <div class="checkline"><input type="checkbox" id="discord_speakTextRepliesInVoice"><label for="discord_speakTextRepliesInVoice">Speak text-channel replies aloud in voice <span class="hint">(off = voice only speaks actual voice-call replies)</span></label></div>
     </div>
     <div class="row">
       <div>
@@ -323,6 +332,27 @@
       <button onclick="saveConfig()">Save changes</button>
       <button class="secondary" onclick="closeModal()">Cancel</button>
       <span id="msg4" class="msg"></span>
+    </div>
+  </div>
+
+  <div class="modal" id="modal-web">
+    <div class="modal-title">Web Access</div>
+    <div class="modal-desc">When on, Steve fetches pasted links and can search the web for "look up X" / "search for X" / "google X" — everywhere (DMs, channels, voice). Private/LAN addresses are always refused.</div>
+    <div class="checkline"><input type="checkbox" id="web_enabled"><label for="web_enabled">Allow web access</label></div>
+    <div class="row">
+      <div>
+        <label>Max characters fed to the AI</label>
+        <input type="number" id="web_maxChars">
+      </div>
+      <div>
+        <label>Fetch/search timeout (seconds)</label>
+        <input type="number" id="web_timeout">
+      </div>
+    </div>
+    <div class="save-row">
+      <button onclick="saveConfig()">Save changes</button>
+      <button class="secondary" onclick="closeModal()">Cancel</button>
+      <span id="msg5" class="msg"></span>
     </div>
   </div>
 
@@ -374,7 +404,8 @@ async function loadStatus() {
 async function loadConfig() {
   const r = await fetch('/admin/config');
   CFG = await r.json();
-  const ai = CFG.ai || {}, prof = CFG.profiles || {}, d = CFG.discord || {}, v = CFG.voice || {};
+  const ai = CFG.ai || {}, prof = CFG.profiles || {}, d = CFG.discord || {}, v = CFG.voice || {},
+        web = CFG.web || {};
 
   set('ai_provider', ai.provider || 'ollama');
   set('ai_model', ai.model || '');
@@ -399,6 +430,7 @@ async function loadConfig() {
   setChecked('discord_respondToName', d.respondToName !== false);
   setChecked('discord_replyToAllDMs', d.replyToAllDMs);
   setChecked('discord_autoReactEnabled', d.autoReactEnabled !== false);
+  setChecked('discord_speakTextRepliesInVoice', d.speakTextRepliesInVoice);
   set('discord_autoReactEveryMessages', d.autoReactEveryMessages ?? 6);
   set('discord_replyCooldownSeconds', d.replyCooldownSeconds ?? 8);
 
@@ -407,13 +439,17 @@ async function loadConfig() {
   set('voice_pauseThreshold', v.pauseThreshold ?? 1.5);
   set('voice_ttsRate', v.ttsRate ?? 1.0);
 
+  setChecked('web_enabled', web.enabled !== false);
+  set('web_maxChars', web.maxChars ?? 2000);
+  set('web_timeout', web.timeout ?? 10);
+
   const secrets = CFG.secretsSet || {};
   document.getElementById('tok_state').textContent = secrets['discord.botToken'] ? 'set' : 'not set';
   document.getElementById('key_state').textContent = secrets['ai.claudeApiKey'] ? 'set' : 'not set';
 }
 
 function showMsg(text, isErr) {
-  ['msg', 'msg2', 'msg3', 'msg4'].forEach(id => {
+  ['msg', 'msg2', 'msg3', 'msg4', 'msg5'].forEach(id => {
     const el = document.getElementById(id);
     el.textContent = text;
     el.className = 'msg' + (isErr ? ' err' : '');
@@ -444,6 +480,7 @@ async function saveConfig() {
       respondToName: checked('discord_respondToName'),
       replyToAllDMs: checked('discord_replyToAllDMs'),
       autoReactEnabled: checked('discord_autoReactEnabled'),
+      speakTextRepliesInVoice: checked('discord_speakTextRepliesInVoice'),
       autoReactEveryMessages: parseInt(val('discord_autoReactEveryMessages')) || 6,
       replyCooldownSeconds: parseInt(val('discord_replyCooldownSeconds')) || 8,
     },
@@ -452,6 +489,11 @@ async function saveConfig() {
       energyThreshold: parseFloat(val('voice_energyThreshold')) || 200,
       pauseThreshold: parseFloat(val('voice_pauseThreshold')) || 1.5,
       ttsRate: parseFloat(val('voice_ttsRate')) || 1.0,
+    },
+    web: {
+      enabled: checked('web_enabled'),
+      maxChars: parseInt(val('web_maxChars')) || 2000,
+      timeout: parseInt(val('web_timeout')) || 10,
     },
   };
   try {
@@ -538,11 +580,19 @@ async function loadHardware() {
       } else {
         setMeter('hw_power_bar', 'hw_power_label', 0, 'n/a');
       }
+      if (g.energyTotalWh != null) {
+        const wh = g.energyTotalWh;
+        const txt = wh >= 1000 ? `${(wh/1000).toFixed(2)} kWh` : `${wh.toFixed(1)} Wh`;
+        document.getElementById('hw_energy_label').textContent = `${txt} (since tracking started)`;
+      } else {
+        document.getElementById('hw_energy_label').textContent = 'n/a';
+      }
       document.getElementById('hw_note').textContent = '';
     } else {
       setMeter('hw_gpu_bar', 'hw_gpu_label', 0, 'n/a');
       setMeter('hw_vram_bar', 'hw_vram_label', 0, 'n/a');
       setMeter('hw_power_bar', 'hw_power_label', 0, 'n/a');
+      document.getElementById('hw_energy_label').textContent = 'n/a';
       document.getElementById('hw_note').textContent =
         'No GPU detected (nvidia-smi not found — pass the GPU through to the LXC/VM to see it here).';
     }

@@ -5,6 +5,7 @@ config.json
 chat_history.jsonl
 discord.log
 debug_last.wav
+power_usage.json
 
 # python
 __pycache__/

@@ -6,8 +6,17 @@ into the container) reports GPU utilization + VRAM. Everything degrades
 gracefully to "not available" if a piece isn't there.
 """
 
+import json
 import shutil
 import subprocess
+import threading
+import time
+from pathlib import Path
+
+_POWER_LOG = Path(__file__).parent / "power_usage.json"
+_power_lock = threading.Lock()
+_MAX_GAP_HOURS = 0.05     # ~3 min cap per sample so a long gap (restart/sleep) can't fake a huge jump
+DEFAULT_POWER_LIMIT_W = 80.0   # this rig's laptop 3050 caps around 80W; used when nvidia-smi reports none
 
 
 def _to_float(s):
@@ -15,6 +24,29 @@ def _to_float(s):
         return float(s)
     except (TypeError, ValueError):
         return None   # nvidia-smi reports "[N/A]" on GPUs without power sensors
+
+
+def _accumulate_energy(power_w):
+    """Track cumulative energy draw (Wh) for the primary GPU, persisted to
+    disk so the running total survives bot restarts."""
+    if power_w is None:
+        return None
+    now = time.time()
+    with _power_lock:
+        try:
+            state = json.loads(_POWER_LOG.read_text())
+        except Exception:
+            state = {"totalWh": 0.0, "lastTs": None}
+        last_ts = state.get("lastTs")
+        if last_ts:
+            elapsed_hours = min(max(0.0, now - last_ts) / 3600, _MAX_GAP_HOURS)
+            state["totalWh"] = state.get("totalWh", 0.0) + power_w * elapsed_hours
+        state["lastTs"] = now
+        try:
+            _POWER_LOG.write_text(json.dumps(state))
+        except Exception as e:
+            print(f"[hwstats] couldn't save power log: {e}")
+        return round(state["totalWh"], 3)
 
 
 def _cpu_ram():
@@ -51,21 +83,27 @@ def _gpu():
             timeout=5, text=True, stderr=subprocess.DEVNULL,
         ).strip()
         gpus = []
-        for line in out.splitlines():
+        for i, line in enumerate(out.splitlines()):
             parts = [p.strip() for p in line.split(",")]
             if len(parts) < 4:
                 continue
             name, util, used, total = parts[:4]
             power_draw = _to_float(parts[4]) if len(parts) > 4 else None
             power_limit = _to_float(parts[5]) if len(parts) > 5 else None
-            gpus.append({
+            if power_limit is None:
+                power_limit = DEFAULT_POWER_LIMIT_W   # nvidia-smi doesn't report a limit on this GPU
+            gpu_entry = {
                 "name": name,
                 "gpuPercent": float(util),
                 "vramUsedMB": float(used),
                 "vramTotalMB": float(total),
                 "powerDrawW": power_draw,
                 "powerLimitW": power_limit,
-            })
+            }
+            if i == 0:
+                # only track cumulative energy for the primary GPU
+                gpu_entry["energyTotalWh"] = _accumulate_energy(power_draw)
+            gpus.append(gpu_entry)
         return {"available": bool(gpus), "gpus": gpus}
     except Exception as e:
         return {"available": False, "error": str(e)}
