@@ -22,7 +22,7 @@ from discord.ext import commands
 from state import load_config
 from voice import VoiceManager
 
-NAME_RE = re.compile(r"\bsteve\b", re.IGNORECASE)
+NAME_RE = re.compile(r"^\s*steve\b", re.IGNORECASE)   # must START with "steve", not just mention it
 DISCORD_SAFE_LEN = 1900   # leave headroom under Discord's 2000-char message cap
 CODE_BLOCK_RE = re.compile(r"```(\w*)\n?(.*?)```", re.DOTALL)
 LANG_EXT = {
@@ -111,9 +111,14 @@ def create_bot(state, brain, broadcaster):
         if str(cid) in thread_ids and not isinstance(message.channel, discord.Thread):
             try:
                 name = (name_hint or reply)[:90].strip() or "steve"
-                thread = await message.create_thread(name=name)
+                thread = await message.create_thread(name=name, auto_archive_duration=1440)
                 await send_maybe_file(thread.send, reply)
+                print(f"[discord] replied in thread '{thread.name}' ({thread.id}) in #{message.channel.name}")
                 return
+            except discord.Forbidden:
+                print(f"[discord] thread reply failed in #{message.channel.name}: missing permission - "
+                      "check the bot has 'Create Public Threads' + 'Send Messages in Threads'. "
+                      "Falling back to an inline reply.")
             except Exception as e:
                 print(f"[discord] thread reply failed, replying inline instead: {e}")
         if mention_reply:
@@ -171,7 +176,7 @@ def create_bot(state, brain, broadcaster):
             f"{message.author.display_name}: {text}")
 
         mentioned = bot.user in message.mentions
-        named = dcfg.get("respondToName", True) and NAME_RE.search(text)
+        named = dcfg.get("respondToName", True) and NAME_RE.match(text)
         always_id = str(dcfg.get("alwaysRespondChannelId", "") or "").strip()
         always = bool(always_id) and str(cid) == always_id
         cooldown = int(dcfg.get("replyCooldownSeconds", 8))
@@ -190,7 +195,8 @@ def create_bot(state, brain, broadcaster):
             if reply:
                 await deliver_reply(message, dcfg, cid, reply, clean, mention_reply=True)
                 await show_on_stream("discord", message.author.display_name, clean, reply)
-                voice_mgr.speak(message.guild.voice_client, reply)
+                if dcfg.get("speakTextRepliesInVoice", False):
+                    voice_mgr.speak(message.guild.voice_client, reply)
             counters[cid] = 0
             return
 
@@ -223,11 +229,35 @@ def create_bot(state, brain, broadcaster):
         prompt = f'[{interaction.user.display_name} asks via /ask]: {question}'
         reply = await brain.ask(f"guild:{interaction.channel_id}", prompt,
                                 "discord_ask", interaction.user.display_name)
-        await send_maybe_file(interaction.followup.send, reply or "(my AI brain is unreachable right now)")
-        if reply:
-            await show_on_stream("discord", interaction.user.display_name, question, reply)
-            if interaction.guild:
-                voice_mgr.speak(interaction.guild.voice_client, reply)
+        if not reply:
+            await interaction.followup.send("(my AI brain is unreachable right now)")
+            return
+
+        dcfg = load_config().get("discord", {})
+        thread_ids = [str(i) for i in dcfg.get("threadReplyChannelIds", [])]
+        cid = interaction.channel_id
+        thread = None
+        if str(cid) in thread_ids and isinstance(interaction.channel, discord.TextChannel):
+            try:
+                thread = await interaction.channel.create_thread(
+                    name=question[:90].strip() or "steve",
+                    type=discord.ChannelType.public_thread, auto_archive_duration=1440)
+                await interaction.followup.send(f"Answered in {thread.mention}", ephemeral=True)
+                await send_maybe_file(thread.send, reply)
+                print(f"[discord] /ask replied in thread '{thread.name}' ({thread.id})")
+            except discord.Forbidden:
+                print("[discord] /ask thread reply failed: missing 'Create Public Threads' permission - "
+                      "replying inline instead.")
+                thread = None
+            except Exception as e:
+                print(f"[discord] /ask thread reply failed, replying inline instead: {e}")
+                thread = None
+        if thread is None:
+            await send_maybe_file(interaction.followup.send, reply)
+
+        await show_on_stream("discord", interaction.user.display_name, question, reply)
+        if interaction.guild and dcfg.get("speakTextRepliesInVoice", False):
+            voice_mgr.speak(interaction.guild.voice_client, reply)
 
     @bot.tree.command(name="status", description="Show Steve's status")
     async def status_cmd(interaction: discord.Interaction):
@@ -244,15 +274,18 @@ def create_bot(state, brain, broadcaster):
 
     @bot.tree.command(name="help", description="What can Steve do?")
     async def help_cmd(interaction: discord.Interaction):
-        dcfg = load_config().get("discord", {})
+        cfg = load_config()
+        dcfg = cfg.get("discord", {})
         always_id = dcfg.get("alwaysRespondChannelId", "")
         always_note = (f"\nIn <#{always_id}> I answer every message, no need to say my name.\n"
                        if always_id else "\n")
+        web_note = ('\nPaste a link and I\'ll read it, or say "look up X" / "search for X" and '
+                    "I'll check the web.\n" if cfg.get("web", {}).get("enabled", True) else "\n")
         await interaction.response.send_message(
             "**Steve — IT Club assistant**\n"
             "Say my name or @ mention me in a channel and I'll answer. DM me to chat privately. "
             "In voice, say \"steve\" or \"hey steve\" before your question."
-            f"{always_note}\n"
+            f"{always_note}{web_note}\n"
             "/ask <question> — ask me anything, anywhere\n"
             "/poll <question> <options> — start a quick poll in this channel\n"
             "/status — what mode/model I'm running\n"
