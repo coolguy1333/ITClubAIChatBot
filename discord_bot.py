@@ -145,6 +145,19 @@ def create_bot(state, brain, broadcaster):
                 print(f"[voice] auto-join failed: {e}")
 
     @bot.event
+    async def on_voice_state_update(member, before, after):
+        # leave automatically once everyone else has left the call - no
+        # point sitting in an empty voice channel listening to nobody
+        guild = member.guild
+        vc = guild.voice_client
+        if not vc or not vc.is_connected():
+            return
+        humans = [m for m in vc.channel.members if not m.bot]
+        if not humans:
+            print(f"[voice] {vc.channel.name} is empty - leaving")
+            await voice_mgr.leave(guild)
+
+    @bot.event
     async def on_message(message):
         if message.author == bot.user or message.author.bot:
             return
