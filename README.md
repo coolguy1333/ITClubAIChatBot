@@ -25,9 +25,10 @@ A single-process Discord bot that acts as an AI assistant for the IT Club.
   back with TTS (pyttsx3 + ffmpeg). `/leave` to kick him out,
   `/hallucination` to teach him phrases that are actually mic noise.
   Auto-reconnects if the connection drops.
-- **Casual / meeting modes** — a manual toggle between a relaxed "casual"
-  system prompt and a more focused "meeting" prompt for when club meetings
-  are in session. Switch with `/casual` and `/meeting`.
+- **System-prompt modes** — define as many modes as you like (a relaxed
+  "casual" one, a focused "meeting" one for when club meetings are in session,
+  anything else). Create/edit them with `/addprompt <name> <prompt>` and switch
+  between them with `/mode <name>`.
 
 ## Quick start (Linux / a VM or LXC)
 
@@ -123,7 +124,8 @@ which needs a restart.
 | `/join` / `/leave` | everyone | Steve joins/leaves your voice channel |
 | `/hallucination [phrase]` | everyone | Teach Steve to ignore a noise phrase |
 | `/say <text>` | officer | Steve posts it on the live display |
-| `/meeting` / `/casual` | officer | Switch system prompt mode |
+| `/mode <name>` | officer | Switch to any defined system-prompt mode |
+| `/addprompt <name> <prompt>` | officer | Create or update a mode's system prompt |
 | `/reset` | officer | Clear conversation memory |
 
 ## Files

@@ -50,7 +50,7 @@ key setup below (do that first).
 | Field | What |
 | --- | --- |
 | `discord.botToken` | bot account token (from the [Discord Developer Portal](https://discord.com/developers/applications) → your app → Bot). Needs **Message Content** + **Voice States** intents enabled there. |
-| `discord.adminUserId` | the officer's Discord user ID — right-click yourself → Copy User ID (needs Developer Mode on). Gets access to `/say`, `/meeting`, `/casual`, `/reset`. |
+| `discord.adminUserId` | the officer's Discord user ID — right-click yourself → Copy User ID (needs Developer Mode on). Gets access to `/say`, `/mode`, `/addprompt`, `/reset`. |
 | `discord.chatChannelIds` | `[]` = Steve may talk in any channel; or list specific channel IDs |
 | `discord.alwaysRespondChannelId` | one channel where Steve answers *every* message — no @mention, no "steve", no `/ask` needed. Good for a dedicated help channel. |
 
@@ -92,10 +92,11 @@ he answers from. Private/LAN addresses are always refused, so chat can't
 make him poke around your network.
 
 ### Personalities
-`profiles.casual` / `profiles.meeting` hold the system prompts. Toggle
-manually with `/casual`, `/meeting` in Discord or the mode buttons in the
-GUI / admin UI — there's no automatic switching since there's no stream
-status to key off anymore.
+Each key under `profiles` (e.g. `profiles.casual`, `profiles.meeting`) holds a
+mode's system prompt; `profiles.mode` is the current default. Add or edit modes
+on the fly with `/addprompt <name> <prompt>`, then switch with `/mode <name>` in
+Discord (or the mode buttons in the GUI / admin UI) — there's no automatic
+switching since there's no stream status to key off anymore.
 
 ## 5. Run him
 
@@ -139,7 +140,7 @@ Other commands: `/help` (lists everything), `/status`, `/reset [scope]`
 (wipe his memory — everything, or just DMs / Discord channels / voice
 calls, e.g. when chat prompt-injects him into PotatoGPT), `/hallucination
 [phrase]` (teach him a phrase is mic noise, e.g. breathing that transcribes
-as words), `/meeting` `/casual` (officer only).
+as words), `/mode <name>` `/addprompt <name> <prompt>` (officer only).
 
 Steve also chimes into channel chatter on his own every ~6 messages
 (tune `discord.autoReactEveryMessages`; `discord.autoReactEnabled: false`

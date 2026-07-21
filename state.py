@@ -12,6 +12,11 @@ def load_config():
         return json.load(f)
 
 
+def save_config(cfg):
+    with open(CONFIG_PATH, "w", encoding="utf-8") as f:
+        json.dump(cfg, f, indent=2)
+
+
 class State:
     """In-memory state shared by every component."""
 
