@@ -6,7 +6,7 @@
 - /join pulls Steve into a voice channel: he transcribes everyone with
   Vosk (local) and talks back with TTS.
 - Slash commands for everyone (/ask, /status, /help, /join, /leave,
-  /hallucination) and officer-only controls (/say, /meeting, /casual, /reset).
+  /hallucination) and officer-only controls (/say, /mode, /addprompt, /reset).
 """
 
 import datetime
@@ -18,7 +18,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-from state import load_config
+from state import load_config, save_config
 from voice import VoiceManager
 
 NAME_RE = re.compile(r"^\s*steve\b", re.IGNORECASE)   # must START with "steve", not just mention it
@@ -312,7 +312,7 @@ def create_bot(state, brain, broadcaster):
             "/join — pull me into your voice channel to listen and talk\n"
             "/leave — I'll head out of voice\n"
             "/hallucination — tell me to ignore a bad transcription\n\n"
-            "Officer-only: /say, /meeting, /casual, /reset",
+            "Officer-only: /say, /mode, /addprompt, /reset",
             ephemeral=True)
 
     @bot.tree.command(name="join", description="Steve joins your voice channel and starts listening")
@@ -398,21 +398,56 @@ def create_bot(state, brain, broadcaster):
         await show_on_stream("say", "", "", text)
         await interaction.response.send_message(f"Posted: {text}", ephemeral=True)
 
-    async def _set_mode(interaction, mode):
+    def _profile_names(cfg=None):
+        """Every defined profile — the 'mode' key holds the default, not a profile."""
+        profiles = (cfg or load_config()).get("profiles", {})
+        return [name for name in profiles if name != "mode"]
+
+    @bot.tree.command(name="addprompt",
+                      description="(officer) Create or update a mode with a system prompt")
+    @app_commands.describe(name="Mode name (e.g. meeting, casual, hackathon)",
+                           prompt="The system prompt Steve uses in this mode")
+    async def addprompt_cmd(interaction: discord.Interaction, name: str, prompt: str):
         if not officer_only(interaction):
             await interaction.response.send_message("Officers only.", ephemeral=True)
             return
-        state.mode = mode
+        name = name.strip().lower()
+        if not name or name == "mode":
+            await interaction.response.send_message(
+                'Pick a name other than "mode".', ephemeral=True)
+            return
+        cfg = load_config()
+        profiles = cfg.setdefault("profiles", {})
+        existed = name in profiles
+        profiles.setdefault(name, {})["systemPrompt"] = prompt.strip()
+        save_config(cfg)
+        verb = "Updated" if existed else "Created"
         await interaction.response.send_message(
-            f"Mode set to **{mode}**", ephemeral=True)
+            f"{verb} mode **{name}** — switch to it with `/mode {name}`.", ephemeral=True)
 
-    @bot.tree.command(name="meeting", description="(officer) Switch Steve to meeting mode")
-    async def meeting_cmd(interaction: discord.Interaction):
-        await _set_mode(interaction, "meeting")
+    @bot.tree.command(name="mode", description="(officer) Switch Steve to a defined mode")
+    @app_commands.describe(name="Which mode to switch to")
+    async def mode_cmd(interaction: discord.Interaction, name: str):
+        if not officer_only(interaction):
+            await interaction.response.send_message("Officers only.", ephemeral=True)
+            return
+        name = name.strip().lower()
+        names = _profile_names()
+        if name not in names:
+            available = ", ".join(sorted(names)) or "none defined yet"
+            await interaction.response.send_message(
+                f'No mode called **{name}**. Available: {available} '
+                "(add one with `/addprompt`).", ephemeral=True)
+            return
+        state.mode = name
+        await interaction.response.send_message(
+            f"Mode set to **{name}**", ephemeral=True)
 
-    @bot.tree.command(name="casual", description="(officer) Switch Steve back to casual mode")
-    async def casual_cmd(interaction: discord.Interaction):
-        await _set_mode(interaction, "casual")
+    @mode_cmd.autocomplete("name")
+    async def mode_autocomplete(interaction: discord.Interaction, current: str):
+        current = current.lower()
+        return [app_commands.Choice(name=n, value=n)
+                for n in sorted(_profile_names()) if current in n][:25]
 
     @bot.tree.command(name="reset", description="(officer) Clear Steve's conversation memory")
     @app_commands.describe(scope="Which memory to clear (default: everything)")
