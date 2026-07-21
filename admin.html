@@ -188,7 +188,11 @@
   <div class="group-label">Activity</div>
   <div class="panel">
     <h2>Recent conversations</h2>
-    <table id="logTable"><thead><tr><th>Time</th><th>Channel</th><th>Source</th><th>User</th><th>Message</th><th>Reply</th></tr></thead><tbody></tbody></table>
+    <input type="text" id="logSearch" placeholder="Search messages, replies, users, channels..."
+           oninput="onLogSearchInput()" style="width:100%;box-sizing:border-box;margin-bottom:10px;">
+    <div id="logTableWrap" style="max-height:520px;overflow-y:auto;">
+      <table id="logTable"><thead><tr><th>Time</th><th>Channel</th><th>Source</th><th>User</th><th>Message</th><th>Reply</th></tr></thead><tbody></tbody></table>
+    </div>
   </div>
 
 </div>
@@ -518,18 +522,33 @@ async function saveSecrets() {
   }
 }
 
+let _logSearchTimer = null;
+
 async function loadLog() {
+  const q = (document.getElementById('logSearch')?.value || '').trim();
   try {
-    const rows = await (await fetch('/admin/log?n=50')).json();
+    const url = '/admin/log?n=300' + (q ? '&q=' + encodeURIComponent(q) : '');
+    const rows = await (await fetch(url)).json();
     const tb = document.querySelector('#logTable tbody');
     tb.innerHTML = '';
+    if (!rows.length) {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td colspan="6" style="opacity:.6;">${q ? 'No matches.' : 'No history yet.'}</td>`;
+      tb.appendChild(tr);
+      return;
+    }
     rows.slice().reverse().forEach(e => {
       const tr = document.createElement('tr');
       tr.innerHTML = `<td>${(e.ts||'').replace('T',' ')}</td><td>${e.key||''}</td><td>${e.source||''}</td>` +
-        `<td>${e.user||''}</td><td>${(e.msg||'').slice(0,120)}</td><td>${(e.reply||'').slice(0,160)}</td>`;
+        `<td>${e.user||''}</td><td>${(e.msg||'').slice(0,200)}</td><td>${(e.reply||'').slice(0,300)}</td>`;
       tb.appendChild(tr);
     });
   } catch (e) { /* no history yet */ }
+}
+
+function onLogSearchInput() {
+  clearTimeout(_logSearchTimer);
+  _logSearchTimer = setTimeout(loadLog, 250);
 }
 
 function meterClass(pct) {
@@ -588,4 +607,27 @@ async function loadHardware() {
       }
       document.getElementById('hw_note').textContent = '';
     } else {
-      setMeter('hw_gpu_bar', '
+      setMeter('hw_gpu_bar', 'hw_gpu_label', 0, 'n/a');
+      setMeter('hw_vram_bar', 'hw_vram_label', 0, 'n/a');
+      setMeter('hw_power_bar', 'hw_power_label', 0, 'n/a');
+      document.getElementById('hw_energy_label').textContent = 'n/a';
+      document.getElementById('hw_note').textContent =
+        'No GPU detected (nvidia-smi not found — pass the GPU through to the LXC/VM to see it here).';
+    }
+  } catch (e) {
+    document.getElementById('hw_note').textContent = 'Hardware stats unavailable — is Steve running?';
+  }
+}
+
+(async () => {
+  await loadStatus();
+  await loadConfig();
+  await loadLog();
+  await loadHardware();
+  setInterval(loadStatus, 5000);
+  setInterval(loadLog, 8000);
+  setInterval(loadHardware, 3000);
+})();
+</script>
+</body>
+</html>

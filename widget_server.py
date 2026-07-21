@@ -148,18 +148,35 @@ class _WidgetHandler(BaseHTTPRequestHandler):
             self._ok(json.dumps(get_hw_stats()).encode(), "application/json")
         elif self.path.startswith("/admin/log"):
             from urllib.parse import urlparse, parse_qs
-            n = int(parse_qs(urlparse(self.path).query).get("n", ["50"])[0])
-            lines = []
+            qs = parse_qs(urlparse(self.path).query)
+            n = int(qs.get("n", ["200"])[0])
+            n = max(1, min(n, 5000))
+            q = (qs.get("q", [""])[0] or "").strip().lower()
             path = BASE / "chat_history.jsonl"
+            entries = []
             if path.exists():
                 with open(path, "r", encoding="utf-8") as f:
-                    lines = f.readlines()[-max(1, min(n, 500)):]
-            entries = []
-            for line in lines:
-                try:
-                    entries.append(json.loads(line))
-                except Exception:
-                    pass
+                    lines = f.readlines()
+                if q:
+                    # search the whole file (not just the last n lines), then
+                    # take the most recent n matches - otherwise searching for
+                    # something older than the last page would find nothing
+                    for line in lines:
+                        try:
+                            e = json.loads(line)
+                        except Exception:
+                            continue
+                        haystack = " ".join(str(e.get(f, "")) for f in
+                                             ("key", "source", "user", "msg", "reply")).lower()
+                        if q in haystack:
+                            entries.append(e)
+                    entries = entries[-n:]
+                else:
+                    for line in lines[-n:]:
+                        try:
+                            entries.append(json.loads(line))
+                        except Exception:
+                            pass
             self._ok(json.dumps(entries).encode(), "application/json")
         elif self.path == "/status":
             ctx = self.ctx
