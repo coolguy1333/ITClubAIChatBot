@@ -141,7 +141,7 @@ Wants=network-online.target
 [Service]
 Type=simple
 WorkingDirectory=$WORKDIR
-ExecStart=$WORKDIR/venv/bin/python $WORKDIR/run.py
+ExecStart=$WORKDIR/venv/bin/python -u $WORKDIR/run.py
 Restart=on-failure
 RestartSec=5
 User=$RUN_USER
