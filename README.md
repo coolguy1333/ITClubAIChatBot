@@ -38,13 +38,25 @@ curl -fsSL https://raw.githubusercontent.com/coolguy1333/ITClubAIChatBot/main/se
 (or, if you've already cloned the repo, just `bash setup.sh` from inside it)
 
 That installs system + Python deps, grabs the Vosk speech model if it's not
-already there, and creates `config.json` from `config.example.json`. Then
-set your bot token and admin user ID at `http://127.0.0.1:8789/admin` (or
-edit `config.json` by hand) and start Steve:
+already there, creates `config.json` from `config.example.json`, and
+installs + enables a `steve` systemd service so it starts on boot and
+restarts on crash. Set your bot token and admin user ID at
+`http://127.0.0.1:8789/admin` (or edit `config.json` by hand), then:
 
 ```bash
-venv/bin/python run.py
+sudo systemctl start steve      # if it wasn't auto-started (no token set yet)
+systemctl status steve          # check it's running
+journalctl -u steve -f          # tail its logs
 ```
+
+**Re-running `setup.sh` is safe and idempotent** — it detects what's already
+there and reinstalls/updates accordingly:
+- an existing git checkout → `git fetch` + `git reset --hard` to the latest, then reinstalls deps and the systemd service
+- an old/pre-cleanup install (e.g. still has `twitch.py`) → backs it up alongside itself, clones fresh, and carries over your bot token + Vosk model automatically
+- nothing there yet → clones and installs from scratch
+
+So updating Steve to the latest version later is just: re-run the same
+one-liner.
 
 ## Manual setup (any OS, e.g. this Windows PC)
 
