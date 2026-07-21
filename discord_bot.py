@@ -24,11 +24,45 @@ from voice import VoiceManager
 
 NAME_RE = re.compile(r"\bsteve\b", re.IGNORECASE)
 DISCORD_SAFE_LEN = 1900   # leave headroom under Discord's 2000-char message cap
+CODE_BLOCK_RE = re.compile(r"```(\w*)\n?(.*?)```", re.DOTALL)
+LANG_EXT = {
+    "python": "py", "py": "py", "javascript": "js", "js": "js", "typescript": "ts", "ts": "ts",
+    "java": "java", "c": "c", "cpp": "cpp", "c++": "cpp", "csharp": "cs", "cs": "cs",
+    "html": "html", "css": "css", "json": "json", "bash": "sh", "sh": "sh", "shell": "sh",
+    "sql": "sql", "go": "go", "rust": "rs", "rs": "rs", "php": "php", "yaml": "yaml", "yml": "yaml",
+    "powershell": "ps1", "ps1": "ps1",
+}
+
+
+def _ext_for(lang):
+    return LANG_EXT.get((lang or "").strip().lower(), "txt")
 
 
 async def send_maybe_file(send_func, text, **kwargs):
-    """Send text normally, or as a .txt attachment if it's too long for a
-    single Discord message (needs the 'Attach Files' permission)."""
+    """Send a reply, preferring files over a wall of text:
+    - any ```code``` blocks get sent as file attachments (easy to copy/run,
+      syntax highlighting in most editors), named with a sensible extension
+    - otherwise, if the whole thing is too long for one Discord message, it
+      goes as a single .txt attachment instead of getting truncated
+    Needs the 'Attach Files' permission; falls back to plain/truncated text
+    if that's missing or something else goes wrong."""
+    blocks = CODE_BLOCK_RE.findall(text)
+    if blocks:
+        try:
+            remaining = CODE_BLOCK_RE.sub("", text).strip() or "Here's the code:"
+            if len(remaining) > DISCORD_SAFE_LEN:
+                remaining = remaining[:DISCORD_SAFE_LEN] + " …(truncated)"
+            files = []
+            for i, (lang, code) in enumerate(blocks):
+                code = code.strip("\n")
+                name = f"steve-code-{i + 1}.{_ext_for(lang)}" if len(blocks) > 1 \
+                    else f"steve-code.{_ext_for(lang)}"
+                files.append(discord.File(io.BytesIO(code.encode("utf-8")), filename=name))
+            await send_func(remaining, files=files, **kwargs)
+            return
+        except Exception as e:
+            print(f"[discord] couldn't send code as file(s) ({e}) - sending inline instead")
+
     if len(text) <= DISCORD_SAFE_LEN:
         await send_func(text, **kwargs)
         return

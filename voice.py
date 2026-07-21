@@ -406,11 +406,13 @@ class VoiceManager:
 
     async def _reply(self, name, text, vc, started):
         prompt = f'[{name} says in the voice call]: {text}'
+        await self._set_channel_status(vc.channel, "💭 Steve is thinking...")
         t0 = time.monotonic()
         reply = await self.brain.ask(f"voice:{vc.guild.id}", prompt, "discord_voice", name)
         print(f"[timing] AI {time.monotonic()-t0:.1f}s | "
               f"total since silence {time.monotonic()-started:.1f}s")
         if not reply:
+            await self._set_channel_status(vc.channel, "🎙️ Steve is listening")
             return
         print(f"[voice] Steve: {reply}")
         await self.broadcaster.send({"type": "steve", "source": "discord",
@@ -423,6 +425,11 @@ class VoiceManager:
         if vc and vc.is_connected():
             self._tts_queue.put((text, vc))
 
+    def _schedule_status(self, channel, status):
+        """Fire-and-forget channel status update from a non-async thread."""
+        if self.loop and channel:
+            asyncio.run_coroutine_threadsafe(self._set_channel_status(channel, status), self.loop)
+
     def _tts_worker(self):
         while True:
             text, vc = self._tts_queue.get()
@@ -433,6 +440,7 @@ class VoiceManager:
             finally:
                 if self._tts_queue.empty():
                     self.speaking = False
+                    self._schedule_status(vc.channel, "🎙️ Steve is listening")
 
     def _render_and_play(self, text, vc):
         ffmpeg = shutil.which("ffmpeg")
@@ -456,6 +464,7 @@ class VoiceManager:
             os.unlink(tmp)
             return
         self.speaking = True
+        self._schedule_status(vc.channel, "🗣️ Steve is speaking...")
         done = threading.Event()
         vc.play(discord.FFmpegPCMAudio(tmp, executable=ffmpeg),
                 after=lambda err: done.set())
