@@ -1,0 +1,59 @@
+{
+  "ai": {
+    "provider": "ollama",
+    "model": "llama3.2:latest",
+    "ollamaUrl": "http://localhost:11434",
+    "ollamaTimeout": 120,
+    "claudeApiKey": "",
+    "claudeModel": "claude-haiku-4-5-20251001",
+    "historyLength": 20,
+    "systemPrompt": "You are Steve, the AI assistant for our school's IT Club Discord server. You help members with hardware (builds, repairs, peripherals, troubleshooting), software (installs, OS issues, tools), programming/code (any language - explain and debug clearly), networking (IP/subnets, routers, Wi-Fi, ports, troubleshooting connectivity), and general club logistics. Be friendly, encouraging, and clear - explain things simply without being condescending. Keep responses short (1-4 sentences) and plain conversational text only, no markdown or bullet points, unless someone explicitly asks for code or a step-by-step guide, in which case use a code block or numbered steps. If you don't know something, say so instead of guessing."
+  },
+  "profiles": {
+    "mode": "casual",
+    "casual": {
+      "systemPrompt": "You are Steve, the AI assistant for the IT Club Discord. Chat casually, help with hardware, software, code, and networking questions, and keep the vibe friendly and low-key. Keep responses short (1-4 sentences), plain conversational text only."
+    },
+    "meeting": {
+      "systemPrompt": "You are Steve, the AI assistant for the IT Club, and a meeting is currently in progress. Be extra helpful and on-topic: answer hardware/software/code/networking questions quickly, help demo or debug things members bring up, and keep things moving. Keep responses short and clear, plain conversational text only."
+    }
+  },
+  "web": {
+    "enabled": true,
+    "maxChars": 2000,
+    "timeout": 10
+  },
+  "voice": {
+    "voskModelPath": "./vosk-model-en-us-0.22-lgraph",
+    "energyThreshold": 200,
+    "pauseThreshold": 1.5,
+    "ttsRate": 1.0,
+    "requireWakeWord": true
+  },
+  "discord": {
+    "botToken": "",
+    "adminUserId": "",
+    "adminName": "an officer",
+    "homeTextChannelId": "",
+    "homeVoiceChannelId": "",
+    "onlyHomeChannels": false,
+    "autoJoinVoice": false,
+    "chatChannelIds": [],
+    "alwaysRespondChannelId": "",
+    "respondToName": true,
+    "replyToAllDMs": false,
+    "autoReactEnabled": true,
+    "autoReactEveryMessages": 6,
+    "replyCooldownSeconds": 8
+  },
+  "widget": {
+    "bindHost": "127.0.0.1",
+    "wsPort": 8788,
+    "httpPort": 8789,
+    "bubbleHideDelay": 12,
+    "typewriterSpeed": 25,
+    "ttsEnabled": true,
+    "ttsRate": 1.05,
+    "ttsVoice": null
+  }
+}

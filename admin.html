@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Steve — Admin</title>
+<style>
+  :root { color-scheme: dark; }
+  html, body { margin: 0; padding: 0; background: #0c0c12; color: #f2f2f7;
+    font-family: 'Segoe UI', system-ui, sans-serif; }
+  #root { max-width: 900px; margin: 0 auto; padding: 24px 20px 60px; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  .sub { color: #8888a0; font-size: 13px; margin-bottom: 24px; }
+  section { background: #16161f; border: 1px solid #26263a; border-radius: 12px;
+    padding: 18px 20px; margin-bottom: 18px; }
+  h2 { font-size: 15px; margin: 0 0 14px; color: #b9a8ff; text-transform: uppercase;
+    letter-spacing: .4px; }
+  label { display: block; font-size: 12px; color: #b0b0c4; margin: 12px 0 4px; }
+  input[type=text], input[type=password], input[type=number], select, textarea {
+    width: 100%; box-sizing: border-box; background: #1c1c28; border: 1px solid #33334a;
+    border-radius: 8px; color: #f2f2f7; padding: 8px 10px; font-size: 14px;
+    font-family: inherit; }
+  textarea { resize: vertical; min-height: 60px; }
+  .row { display: flex; gap: 16px; flex-wrap: wrap; }
+  .row > div { flex: 1; min-width: 200px; }
+  .checkline { display: flex; align-items: center; gap: 8px; margin: 12px 0 4px; }
+  .checkline input { width: auto; }
+  .checkline label { margin: 0; }
+  button { background: #7c5cff; color: #fff; border: none; border-radius: 8px;
+    padding: 10px 18px; font-size: 14px; font-weight: 600; cursor: pointer; }
+  button:hover { background: #6a4ce8; }
+  button.secondary { background: #2a2a3a; }
+  button.secondary:hover { background: #33334a; }
+  .save-row { display: flex; gap: 10px; align-items: center; margin-top: 16px; }
+  .msg { font-size: 13px; color: #40c463; }
+  .msg.err { color: #ff6675; }
+  .hint { font-size: 12px; color: #6c6c84; margin-top: 4px; }
+  #status { font-size: 13px; color: #8888a0; margin-bottom: 18px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  td, th { text-align: left; padding: 6px 8px; border-bottom: 1px solid #26263a; vertical-align: top; }
+  th { color: #8888a0; font-weight: 600; }
+  .tag { display: inline-block; background: #2a2a3a; border-radius: 6px; padding: 1px 6px;
+    font-size: 11px; color: #b9a8ff; }
+  .meter { margin: 10px 0; }
+  .meter-label { display: flex; justify-content: space-between; font-size: 12px;
+    color: #b0b0c4; margin-bottom: 4px; }
+  .meter-track { background: #1c1c28; border-radius: 6px; height: 8px; overflow: hidden; }
+  .meter-fill { height: 100%; background: #7c5cff; border-radius: 6px; transition: width .4s ease; }
+  .meter-fill.warn { background: #e0a536; }
+  .meter-fill.hot { background: #ff6675; }
+  .hw-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 24px; }
+  .hw-note { font-size: 12px; color: #6c6c84; }
+</style>
+</head>
+<body>
+<div id="root">
+  <h1>Steve — Admin</h1>
+  <div class="sub">Local control panel · config.json lives on this machine only</div>
+  <div id="status">loading status...</div>
+
+  <section>
+    <h2>Hardware</h2>
+    <div class="hw-grid">
+      <div>
+        <div class="meter">
+          <div class="meter-label"><span>CPU</span><span id="hw_cpu_label">–</span></div>
+          <div class="meter-track"><div id="hw_cpu_bar" class="meter-fill" style="width:0%"></div></div>
+        </div>
+        <div class="meter">
+          <div class="meter-label"><span>RAM</span><span id="hw_ram_label">–</span></div>
+          <div class="meter-track"><div id="hw_ram_bar" class="meter-fill" style="width:0%"></div></div>
+        </div>
+      </div>
+      <div id="hw_gpu_col">
+        <div class="meter">
+          <div class="meter-label"><span id="hw_gpu_name">GPU</span><span id="hw_gpu_label">–</span></div>
+          <div class="meter-track"><div id="hw_gpu_bar" class="meter-fill" style="width:0%"></div></div>
+        </div>
+        <div class="meter">
+          <div class="meter-label"><span>VRAM</span><span id="hw_vram_label">–</span></div>
+          <div class="meter-track"><div id="hw_vram_bar" class="meter-fill" style="width:0%"></div></div>
+        </div>
+      </div>
+    </div>
+    <div class="hw-note" id="hw_note"></div>
+  </section>
+
+  <section>
+    <h2>AI</h2>
+    <div class="row">
+      <div>
+        <label>Provider</label>
+        <select id="ai_provider">
+          <option value="ollama">ollama</option>
+          <option value="claude">claude</option>
+        </select>
+      </div>
+      <div>
+        <label>Ollama model</label>
+        <input type="text" id="ai_model">
+      </div>
+      <div>
+        <label>Claude model</label>
+        <input type="text" id="ai_claudeModel">
+      </div>
+    </div>
+    <div class="row">
+      <div>
+        <label>Ollama URL</label>
+        <input type="text" id="ai_ollamaUrl">
+      </div>
+      <div>
+        <label>History length (messages)</label>
+        <input type="number" id="ai_historyLength">
+      </div>
+    </div>
+    <label>Base system prompt</label>
+    <textarea id="ai_systemPrompt" rows="4"></textarea>
+  </section>
+
+  <section>
+    <h2>Personality modes</h2>
+    <label>Active mode</label>
+    <select id="profiles_mode">
+      <option value="casual">casual</option>
+      <option value="meeting">meeting</option>
+    </select>
+    <label>Casual system prompt</label>
+    <textarea id="profiles_casual" rows="3"></textarea>
+    <label>Meeting system prompt</label>
+    <textarea id="profiles_meeting" rows="3"></textarea>
+  </section>
+
+  <section>
+    <h2>Discord</h2>
+    <div class="row">
+      <div>
+        <label>Admin (officer) user ID</label>
+        <input type="text" id="discord_adminUserId">
+      </div>
+      <div>
+        <label>Admin display name</label>
+        <input type="text" id="discord_adminName">
+      </div>
+    </div>
+    <div class="row">
+      <div>
+        <label>Always-respond channel ID <span class="hint">(no wake word needed here)</span></label>
+        <input type="text" id="discord_alwaysRespondChannelId">
+      </div>
+      <div>
+        <label>Home text channel ID</label>
+        <input type="text" id="discord_homeTextChannelId">
+      </div>
+      <div>
+        <label>Home voice channel ID</label>
+        <input type="text" id="discord_homeVoiceChannelId">
+      </div>
+    </div>
+    <label>Allowed chat channel IDs <span class="hint">(comma-separated, blank = all)</span></label>
+    <input type="text" id="discord_chatChannelIds">
+    <div class="row">
+      <div class="checkline"><input type="checkbox" id="discord_onlyHomeChannels"><label for="discord_onlyHomeChannels">Only talk in home text channel</label></div>
+      <div class="checkline"><input type="checkbox" id="discord_autoJoinVoice"><label for="discord_autoJoinVoice">Auto-join home voice channel</label></div>
+      <div class="checkline"><input type="checkbox" id="discord_respondToName"><label for="discord_respondToName">Respond when "steve" is said</label></div>
+      <div class="checkline"><input type="checkbox" id="discord_replyToAllDMs"><label for="discord_replyToAllDMs">Reply to DMs from anyone</label></div>
+      <div class="checkline"><input type="checkbox" id="discord_autoReactEnabled"><label for="discord_autoReactEnabled">Auto-react to chat buzz</label></div>
+    </div>
+    <div class="row">
+      <div>
+        <label>Auto-react every N messages</label>
+        <input type="number" id="discord_autoReactEveryMessages">
+      </div>
+      <div>
+        <label>Reply cooldown (seconds)</label>
+        <input type="number" id="discord_replyCooldownSeconds">
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Voice</h2>
+    <div class="row">
+      <div class="checkline"><input type="checkbox" id="voice_requireWakeWord"><label for="voice_requireWakeWord">Only reply when "steve" / "hey steve" is said</label></div>
+    </div>
+    <div class="row">
+      <div>
+        <label>Energy threshold</label>
+        <input type="number" id="voice_energyThreshold">
+      </div>
+      <div>
+        <label>Pause threshold (s)</label>
+        <input type="number" step="0.1" id="voice_pauseThreshold">
+      </div>
+      <div>
+        <label>TTS rate</label>
+        <input type="number" step="0.1" id="voice_ttsRate">
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Secrets</h2>
+    <label>Discord bot token <span id="tok_state" class="tag"></span></label>
+    <input type="password" id="secret_token" placeholder="leave blank to keep current token">
+    <label>Claude API key <span id="key_state" class="tag"></span></label>
+    <input type="password" id="secret_claude" placeholder="leave blank to keep current key">
+    <div class="save-row">
+      <button class="secondary" onclick="saveSecrets()">Save secrets</button>
+      <span id="secretsMsg" class="msg"></span>
+    </div>
+    <div class="hint">Restart Steve after changing the bot token.</div>
+  </section>
+
+  <div class="save-row">
+    <button onclick="saveConfig()">Save changes</button>
+    <span id="msg" class="msg"></span>
+  </div>
+
+  <section style="margin-top:24px;">
+    <h2>Recent conversations</h2>
+    <table id="logTable"><thead><tr><th>Time</th><th>Channel</th><th>Source</th><th>User</th><th>Message</th><th>Reply</th></tr></thead><tbody></tbody></table>
+  </section>
+</div>
+
+<script>
+let CFG = {};
+
+function val(id) { return document.getElementById(id).value; }
+function set(id, v) { document.getElementById(id).value = v ?? ''; }
+function checked(id) { return document.getElementById(id).checked; }
+function setChecked(id, v) { document.getElementById(id).checked = !!v; }
+
+async function loadStatus() {
+  try {
+    const s = await (await fetch('/status')).json();
+    document.getElementById('status').textContent =
+      `Mode: ${s.mode} | AI: ${s.provider} (${s.model}) | Voice: ${s.voice || 'not connected'}`;
+  } catch (e) {
+    document.getElementById('status').textContent = 'Steve is not running right now.';
+  }
+}
+
+async function loadConfig() {
+  const r = await fetch('/admin/config');
+  CFG = await r.json();
+  const ai = CFG.ai || {}, prof = CFG.profiles || {}, d = CFG.discord || {}, v = CFG.voice || {};
+
+  set('ai_provider', ai.provider || 'ollama');
+  set('ai_model', ai.model || '');
+  set('ai_claudeModel', ai.claudeModel || '');
+  set('ai_ollamaUrl', ai.ollamaUrl || '');
+  set('ai_historyLength', ai.historyLength ?? 20);
+  set('ai_systemPrompt', ai.systemPrompt || '');
+
+  set('profiles_mode', prof.mode || 'casual');
+  set('profiles_casual', (prof.casual || {}).systemPrompt || '');
+  set('profiles_meeting', (prof.meeting || {}).systemPrompt || '');
+
+  set('discord_adminUserId', d.adminUserId || '');
+  set('discord_adminName', d.adminName || '');
+  set('discord_alwaysRespondChannelId', d.alwaysRespondChannelId || '');
+  set('discord_homeTextChannelId', d.homeTextChannelId || '');
+  set('discord_homeVoiceChannelId', d.homeVoiceChannelId || '');
+  set('discord_chatChannelIds', (d.chatChannelIds || []).join(','));
+  setChecked('discord_onlyHomeChannels', d.onlyHomeChannels);
+  setChecked('discord_autoJoinVoice', d.autoJoinVoice);
+  setChecked('discord_respondToName', d.respondToName !== false);
+  setChecked('discord_replyToAllDMs', d.replyToAllDMs);
+  setChecked('discord_autoReactEnabled', d.autoReactEnabled !== false);
+  set('discord_autoReactEveryMessages', d.autoReactEveryMessages ?? 6);
+  set('discord_replyCooldownSeconds', d.replyCooldownSeconds ?? 8);
+
+  setChecked('voice_requireWakeWord', v.requireWakeWord !== false);
+  set('voice_energyThreshold', v.energyThreshold ?? 200);
+  set('voice_pauseThreshold', v.pauseThreshold ?? 1.5);
+  set('voice_ttsRate', v.ttsRate ?? 1.0);
+
+  const secrets = CFG.secretsSet || {};
+  document.getElementById('tok_state').textContent = secrets['discord.botToken'] ? 'set' : 'not set';
+  document.getElementById('key_state').textContent = secrets['ai.claudeApiKey'] ? 'set' : 'not set';
+}
+
+async function saveConfig() {
+  const body = {
+    ai: {
+      provider: val('ai_provider'), model: val('ai_model'), claudeModel: val('ai_claudeModel'),
+      ollamaUrl: val('ai_ollamaUrl'), historyLength: parseInt(val('ai_historyLength')) || 20,
+      systemPrompt: val('ai_systemPrompt'),
+    },
+    profiles: {
+      mode: val('profiles_mode'),
+      casual: { systemPrompt: val('profiles_casual') },
+      meeting: { systemPrompt: val('profiles_meeting') },
+    },
+    discord: {
+      adminUserId: val('discord_adminUserId'), adminName: val('discord_adminName'),
+      alwaysRespondChannelId: val('discord_alwaysRespondChannelId'),
+      homeTextChannelId: val('discord_homeTextChannelId'),
+      homeVoiceChannelId: val('discord_homeVoiceChannelId'),
+      chatChannelIds: val('discord_chatChannelIds').split(',').map(s => s.trim()).filter(Boolean),
+      onlyHomeChannels: checked('discord_onlyHomeChannels'),
+      autoJoinVoice: checked('discord_autoJoinVoice'),
+      respondToName: checked('discord_respondToName'),
+      replyToAllDMs: checked('discord_replyToAllDMs'),
+      autoReactEnabled: checked('discord_autoReactEnabled'),
+      autoReactEveryMessages: parseInt(val('discord_autoReactEveryMessages')) || 6,
+      replyCooldownSeconds: parseInt(val('discord_replyCooldownSeconds')) || 8,
+    },
+    voice: {
+      requireWakeWord: checked('voice_requireWakeWord'),
+      energyThreshold: parseFloat(val('voice_energyThreshold')) || 200,
+      pauseThreshold: parseFloat(val('voice_pauseThreshold')) || 1.5,
+      ttsRate: parseFloat(val('voice_ttsRate')) || 1.0,
+    },
+  };
+  try {
+    await fetch('/admin/config', { method: 'POST', body: JSON.stringify(body) });
+    document.getElementById('msg').textContent = 'Saved.';
+    document.getElementById('msg').className = 'msg';
+    setTimeout(loadStatus, 300);
+  } catch (e) {
+    document.getElementById('msg').textContent = 'Save failed — is Steve running?';
+    document.getElementById('msg').className = 'msg err';
+  }
+}
+
+async function saveSecrets() {
+  const body = { discordBotToken: val('secret_token'), claudeApiKey: val('secret_claude') };
+  try {
+    const r = await (await fetch('/admin/secrets', { method: 'POST', body: JSON.stringify(body) })).json();
+    document.getElementById('secretsMsg').textContent = r.note || 'Saved.';
+    set('secret_token', ''); set('secret_claude', '');
+    loadConfig();
+  } catch (e) {
+    document.getElementById('secretsMsg').textContent = 'Save failed.';
+    document.getElementById('secretsMsg').className = 'msg err';
+  }
+}
+
+async function loadLog() {
+  try {
+    const rows = await (await fetch('/admin/log?n=50')).json();
+    const tb = document.querySelector('#logTable tbody');
+    tb.innerHTML = '';
+    rows.slice().reverse().forEach(e => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${(e.ts||'').replace('T',' ')}</td><td>${e.key||''}</td><td>${e.source||''}</td>` +
+        `<td>${e.user||''}</td><td>${(e.msg||'').slice(0,120)}</td><td>${(e.reply||'').slice(0,160)}</td>`;
+      tb.appendChild(tr);
+    });
+  } catch (e) { /* no history yet */ }
+}
+
+function meterClass(pct) {
+  if (pct >= 90) return 'hot';
+  if (pct >= 70) return 'warn';
+  return '';
+}
+
+function setMeter(barId, labelId, pct, labelText) {
+  const bar = document.getElementById(barId), label = document.getElementById(labelId);
+  bar.style.width = Math.max(0, Math.min(100, pct || 0)) + '%';
+  bar.className = 'meter-fill ' + meterClass(pct || 0);
+  label.textContent = labelText;
+}
+
+async function loadHardware() {
+  try {
+    const h = await (await fetch('/admin/hardware')).json();
+    if (h.cpuPercent != null) {
+      setMeter('hw_cpu_bar', 'hw_cpu_label', h.cpuPercent, `${h.cpuPercent.toFixed(0)}% (${h.cpuCount || '?'} cores)`);
+    } else {
+      setMeter('hw_cpu_bar', 'hw_cpu_label', 0, 'n/a');
+    }
+    if (h.ramUsedMB != null) {
+      const pct = h.ramTotalMB ? (h.ramUsedMB / h.ramTotalMB * 100) : 0;
+      setMeter('hw_ram_bar', 'hw_ram_label', pct, `${(h.ramUsedMB/1024).toFixed(1)} / ${(h.ramTotalMB/1024).toFixed(1)} GB`);
+    } else {
+      setMeter('hw_ram_bar', 'hw_ram_label', 0, 'n/a');
+    }
+    const gpu = h.gpu || {};
+    if (gpu.available && gpu.gpus && gpu.gpus.length) {
+      const g = gpu.gpus[0];
+      document.getElementById('hw_gpu_name').textContent = g.name || 'GPU';
+      setMeter('hw_gpu_bar', 'hw_gpu_label', g.gpuPercent, `${g.gpuPercent.toFixed(0)}%`);
+      const vpct = g.vramTotalMB ? (g.vramUsedMB / g.vramTotalMB * 100) : 0;
+      setMeter('hw_vram_bar', 'hw_vram_label', vpct, `${(g.vramUsedMB/1024).toFixed(1)} / ${(g.vramTotalMB/1024).toFixed(1)} GB`);
+      document.getElementById('hw_note').textContent = '';
+    } else {
+      setMeter('hw_gpu_bar', 'hw_gpu_label', 0, 'n/a');
+      setMeter('hw_vram_bar', 'hw_vram_label', 0, 'n/a');
+      document.getElementById('hw_note').textContent =
+        'No GPU detected (nvidia-smi not found — pass the GPU through to the LXC/VM to see it here).';
+    }
+  } catch (e) {
+    document.getElementById('hw_note').textContent = 'Hardware stats unavailable — is Steve running?';
+  }
+}
+
+(async () => {
+  await loadStatus();
+  await loadConfig();
+  await loadLog();
+  await loadHardware();
+  setInterval(loadStatus, 5000);
+  setInterval(loadLog, 8000);
+  setInterval(loadHardware, 3000);
+})();
+</script>
+</body>
+</html>

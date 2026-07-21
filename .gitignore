@@ -1,0 +1,16 @@
+# secrets - never commit your real config
+config.json
+
+# runtime data
+chat_history.jsonl
+discord.log
+debug_last.wav
+
+# python
+__pycache__/
+*.pyc
+venv/
+.venv/
+
+# large model download (fetched by setup.sh)
+vosk-model-en-us-0.22-lgraph/
