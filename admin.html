@@ -518,6 +518,12 @@ async function loadHardware() {
     } else {
       setMeter('hw_ram_bar', 'hw_ram_label', 0, 'n/a');
     }
+    if (h.swapUsedMB != null && h.swapTotalMB) {
+      const spct = h.swapTotalMB ? (h.swapUsedMB / h.swapTotalMB * 100) : 0;
+      setMeter('hw_swap_bar', 'hw_swap_label', spct, `${(h.swapUsedMB/1024).toFixed(1)} / ${(h.swapTotalMB/1024).toFixed(1)} GB`);
+    } else {
+      setMeter('hw_swap_bar', 'hw_swap_label', 0, h.swapTotalMB === 0 ? 'no swap configured' : 'n/a');
+    }
     const gpu = h.gpu || {};
     if (gpu.available && gpu.gpus && gpu.gpus.length) {
       const g = gpu.gpus[0];
@@ -525,10 +531,18 @@ async function loadHardware() {
       setMeter('hw_gpu_bar', 'hw_gpu_label', g.gpuPercent, `${g.gpuPercent.toFixed(0)}%`);
       const vpct = g.vramTotalMB ? (g.vramUsedMB / g.vramTotalMB * 100) : 0;
       setMeter('hw_vram_bar', 'hw_vram_label', vpct, `${(g.vramUsedMB/1024).toFixed(1)} / ${(g.vramTotalMB/1024).toFixed(1)} GB`);
+      if (g.powerDrawW != null) {
+        const ppct = g.powerLimitW ? (g.powerDrawW / g.powerLimitW * 100) : 0;
+        const limitTxt = g.powerLimitW ? ` / ${g.powerLimitW.toFixed(0)}W` : '';
+        setMeter('hw_power_bar', 'hw_power_label', ppct, `${g.powerDrawW.toFixed(0)}W${limitTxt}`);
+      } else {
+        setMeter('hw_power_bar', 'hw_power_label', 0, 'n/a');
+      }
       document.getElementById('hw_note').textContent = '';
     } else {
       setMeter('hw_gpu_bar', 'hw_gpu_label', 0, 'n/a');
       setMeter('hw_vram_bar', 'hw_vram_label', 0, 'n/a');
+      setMeter('hw_power_bar', 'hw_power_label', 0, 'n/a');
       document.getElementById('hw_note').textContent =
         'No GPU detected (nvidia-smi not found — pass the GPU through to the LXC/VM to see it here).';
     }
