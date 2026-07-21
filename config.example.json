@@ -1,7 +1,7 @@
 {
   "ai": {
     "provider": "ollama",
-    "model": "llama3.2:latest",
+    "model": "qwen2.5:3b-instruct",
     "ollamaUrl": "http://localhost:11434",
     "ollamaTimeout": 120,
     "claudeApiKey": "",
