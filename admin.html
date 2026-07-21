@@ -281,6 +281,8 @@
         <input type="text" id="discord_homeVoiceChannelId">
       </div>
     </div>
+    <label>Always-respond channel personality <span class="hint">(overrides the base system prompt just for that channel — e.g. a funnier, more casual voice)</span></label>
+    <textarea id="discord_alwaysRespondSystemPrompt" rows="3"></textarea>
     <label>Allowed chat channel IDs <span class="hint">(comma-separated, blank = all)</span></label>
     <input type="text" id="discord_chatChannelIds">
     <label>Thread-reply channel IDs <span class="hint">(comma-separated — replies here go into a thread instead of the channel)</span></label>
@@ -309,6 +311,8 @@
     <div class="modal-title">Voice & Wake Word</div>
     <div class="modal-desc">Tuning for the /join voice-call listener.</div>
     <div class="checkline"><input type="checkbox" id="voice_requireWakeWord"><label for="voice_requireWakeWord">Only reply when "steve" / "hey steve" is said</label></div>
+    <label>Vosk speech model path <span class="hint">(folder name relative to the Steve install, e.g. ./vosk-model-en-us-0.42-gigaspeech — restart Steve after changing)</span></label>
+    <input type="text" id="voice_voskModelPath">
     <div class="row">
       <div>
         <label>Energy threshold</label>
@@ -416,6 +420,7 @@ async function loadConfig() {
   set('discord_adminUserId', d.adminUserId || '');
   set('discord_adminName', d.adminName || '');
   set('discord_alwaysRespondChannelId', d.alwaysRespondChannelId || '');
+  set('discord_alwaysRespondSystemPrompt', d.alwaysRespondSystemPrompt || '');
   set('discord_homeTextChannelId', d.homeTextChannelId || '');
   set('discord_homeVoiceChannelId', d.homeVoiceChannelId || '');
   set('discord_chatChannelIds', (d.chatChannelIds || []).join(','));
@@ -428,6 +433,7 @@ async function loadConfig() {
   set('discord_replyCooldownSeconds', d.replyCooldownSeconds ?? 8);
 
   setChecked('voice_requireWakeWord', v.requireWakeWord !== false);
+  set('voice_voskModelPath', v.voskModelPath || '');
   set('voice_energyThreshold', v.energyThreshold ?? 200);
   set('voice_pauseThreshold', v.pauseThreshold ?? 1.5);
   set('voice_ttsRate', v.ttsRate ?? 1.0);
@@ -464,6 +470,7 @@ async function saveConfig() {
     discord: {
       adminUserId: val('discord_adminUserId'), adminName: val('discord_adminName'),
       alwaysRespondChannelId: val('discord_alwaysRespondChannelId'),
+      alwaysRespondSystemPrompt: val('discord_alwaysRespondSystemPrompt'),
       homeTextChannelId: val('discord_homeTextChannelId'),
       homeVoiceChannelId: val('discord_homeVoiceChannelId'),
       chatChannelIds: val('discord_chatChannelIds').split(',').map(s => s.trim()).filter(Boolean),
@@ -477,6 +484,7 @@ async function saveConfig() {
     },
     voice: {
       requireWakeWord: checked('voice_requireWakeWord'),
+      voskModelPath: val('voice_voskModelPath'),
       energyThreshold: parseFloat(val('voice_energyThreshold')) || 200,
       pauseThreshold: parseFloat(val('voice_pauseThreshold')) || 1.5,
       ttsRate: parseFloat(val('voice_ttsRate')) || 1.0,
@@ -580,27 +588,4 @@ async function loadHardware() {
       }
       document.getElementById('hw_note').textContent = '';
     } else {
-      setMeter('hw_gpu_bar', 'hw_gpu_label', 0, 'n/a');
-      setMeter('hw_vram_bar', 'hw_vram_label', 0, 'n/a');
-      setMeter('hw_power_bar', 'hw_power_label', 0, 'n/a');
-      document.getElementById('hw_energy_label').textContent = 'n/a';
-      document.getElementById('hw_note').textContent =
-        'No GPU detected (nvidia-smi not found — pass the GPU through to the LXC/VM to see it here).';
-    }
-  } catch (e) {
-    document.getElementById('hw_note').textContent = 'Hardware stats unavailable — is Steve running?';
-  }
-}
-
-(async () => {
-  await loadStatus();
-  await loadConfig();
-  await loadLog();
-  await loadHardware();
-  setInterval(loadStatus, 5000);
-  setInterval(loadLog, 8000);
-  setInterval(loadHardware, 3000);
-})();
-</script>
-</body>
-</html>
+      setMeter('hw_gpu_bar', '
