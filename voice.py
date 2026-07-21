@@ -271,6 +271,7 @@ class VoiceManager:
         self._model = None
         self._model_lock = threading.Lock()
         self._tts_queue = queue.Queue()
+        self._tts_engine = None           # lazily-created, reused pyttsx3 engine (see _get_tts_engine)
         self.hallucinations = set(_BASE_HALLUCINATIONS)
         for p in load_config().get("discord", {}).get("customHallucinations", []):
             self.hallucinations.add(p.lower().strip())
@@ -344,7 +345,7 @@ class VoiceManager:
                 p = (BASE / path).resolve() if path and not os.path.isabs(path) else path
                 if not p or not os.path.isdir(str(p)):
                     # fallback: model folder shipped alongside the code (VM installs)
-                    local = BASE / "vosk-model-en-us-0.22-lgraph"
+                    local = BASE / "vosk-model-en-us-0.42-gigaspeech"
                     if local.is_dir():
                         p = local
                 print(f"[voice] loading vosk model: {p}")
@@ -442,14 +443,26 @@ class VoiceManager:
                     self.speaking = False
                     self._schedule_status(vc.channel, "🎙️ Steve is listening")
 
+    def _get_tts_engine(self):
+        """pyttsx3's espeak driver on Linux fires its synthesis callback on a
+        background thread via a weakref to the engine's proxy. Calling
+        pyttsx3.init() fresh every utterance let that engine (and its weakly
+        referenced proxy) get garbage-collected mid-callback under load,
+        producing "ReferenceError: weakly-referenced object no longer
+        exists" spam and intermittent silent (0-byte) renders. Keeping one
+        engine alive for the whole process avoids both."""
+        if self._tts_engine is None:
+            import pyttsx3
+            self._tts_engine = pyttsx3.init()
+        return self._tts_engine
+
     def _render_and_play(self, text, vc):
         ffmpeg = shutil.which("ffmpeg")
         if not ffmpeg:
             print("[voice] ffmpeg not found - cannot speak")
             return
-        import pyttsx3
         t0 = time.monotonic()
-        engine = pyttsx3.init()
+        engine = self._get_tts_engine()
         rate = float(self._vcfg.get("ttsRate", 1.0))
         engine.setProperty("rate", int(175 * rate))
         with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
@@ -458,7 +471,8 @@ class VoiceManager:
         engine.runAndWait()
         print(f"[timing] TTS render {time.monotonic()-t0:.1f}s")
         if not os.path.exists(tmp) or os.path.getsize(tmp) == 0:
-            print("[voice] TTS produced no audio (no SAPI voice?)")
+            print("[voice] TTS produced no audio - resetting the TTS engine for next time")
+            self._tts_engine = None   # force a fresh engine next attempt instead of retrying a broken one
             return
         if not vc.is_connected():
             os.unlink(tmp)
