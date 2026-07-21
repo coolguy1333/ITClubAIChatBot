@@ -100,28 +100,31 @@ def create_bot(state, brain, broadcaster):
             "question": question, "text": reply,
         })
 
-    async def deliver_reply(message, dcfg, cid, reply, name_hint, mention_reply):
-        """Send a reply either inline, or into a thread if this channel is
-        configured for it (discord.threadReplyChannelIds - needs the
-        'Create Public Threads' + 'Send Messages in Threads' permissions)."""
+    async def get_reply_thread(message, dcfg, cid, name_hint):
+        """If this channel is configured for thread replies and we're not
+        already inside one, create the thread NOW (before asking the AI) so
+        the conversation-history key can be the thread's own id from the very
+        first message - otherwise the first answer gets stored under the
+        parent channel's key while every follow-up in the thread looks it up
+        under the thread's key, and Steve "forgets" the question that started
+        the thread. Returns the thread, or None if not applicable/failed
+        (caller falls back to a normal inline reply)."""
         thread_ids = [str(i) for i in dcfg.get("threadReplyChannelIds", [])]
-        if str(cid) in thread_ids and not isinstance(message.channel, discord.Thread):
-            try:
-                name = (name_hint or reply)[:90].strip() or "steve"
-                thread = await message.create_thread(name=name, auto_archive_duration=1440)
-                await send_maybe_file(thread.send, reply)
-                print(f"[discord] replied in thread '{thread.name}' ({thread.id}) in #{message.channel.name}")
-                return
-            except discord.Forbidden:
-                print(f"[discord] thread reply failed in #{message.channel.name}: missing permission - "
-                      "check the bot has 'Create Public Threads' + 'Send Messages in Threads'. "
-                      "Falling back to an inline reply.")
-            except Exception as e:
-                print(f"[discord] thread reply failed, replying inline instead: {e}")
-        if mention_reply:
-            await send_maybe_file(message.reply, reply, mention_author=False)
-        else:
-            await send_maybe_file(message.channel.send, reply)
+        if str(cid) not in thread_ids or isinstance(message.channel, discord.Thread):
+            return None
+        try:
+            name = (name_hint or "steve")[:90].strip() or "steve"
+            thread = await message.create_thread(name=name, auto_archive_duration=1440)
+            print(f"[discord] created reply thread '{thread.name}' ({thread.id}) in #{message.channel.name}")
+            return thread
+        except discord.Forbidden:
+            print(f"[discord] thread reply failed in #{message.channel.name}: missing permission - "
+                  "check the bot has 'Create Public Threads' + 'Send Messages in Threads'. "
+                  "Falling back to an inline reply.")
+            return None
+        except Exception as e:
+            print(f"[discord] thread reply failed, replying inline instead: {e}")
+            return None
 
     @bot.event
     async def on_ready():
@@ -208,11 +211,21 @@ def create_bot(state, brain, broadcaster):
             clean = re.sub(rf"<@!?{bot.user.id}>", "Steve", text).strip()
             who = message.author.display_name + (" (an officer)" if is_admin(message.author.id) else "")
             prompt = f"[{who} says in Discord chat]: {clean}"
+
+            # create the thread (if this channel is configured for it) BEFORE
+            # asking the AI, so the very first answer is keyed to the thread's
+            # own id - same key every follow-up message in it will use
+            thread = None if in_reply_thread else await get_reply_thread(message, dcfg, cid, clean)
+            key_cid = thread.id if thread else cid
+
             async with message.channel.typing():
-                reply = await brain.ask(f"guild:{cid}", prompt,
+                reply = await brain.ask(f"guild:{key_cid}", prompt,
                                         "discord_chat", message.author.display_name)
             if reply:
-                await deliver_reply(message, dcfg, cid, reply, clean, mention_reply=True)
+                if thread:
+                    await send_maybe_file(thread.send, reply)
+                else:
+                    await send_maybe_file(message.reply, reply, mention_author=False)
                 await show_on_stream("discord", message.author.display_name, clean, reply)
                 if dcfg.get("speakTextRepliesInVoice", False):
                     voice_mgr.speak(message.guild.voice_client, reply)
@@ -224,33 +237,42 @@ def create_bot(state, brain, broadcaster):
     @app_commands.describe(question="What do you want to ask?")
     async def ask_cmd(interaction: discord.Interaction, question: str):
         await interaction.response.defer()
-        prompt = f'[{interaction.user.display_name} asks via /ask]: {question}'
-        reply = await brain.ask(f"guild:{interaction.channel_id}", prompt,
-                                "discord_ask", interaction.user.display_name)
-        if not reply:
-            await interaction.followup.send("(my AI brain is unreachable right now)")
-            return
-
         dcfg = load_config().get("discord", {})
         thread_ids = [str(i) for i in dcfg.get("threadReplyChannelIds", [])]
         cid = interaction.channel_id
+
+        # create the thread BEFORE asking the AI (same reasoning as
+        # get_reply_thread above) so this first answer and every follow-up
+        # message in the thread share the same conversation-history key
         thread = None
         if str(cid) in thread_ids and isinstance(interaction.channel, discord.TextChannel):
             try:
                 thread = await interaction.channel.create_thread(
                     name=question[:90].strip() or "steve",
                     type=discord.ChannelType.public_thread, auto_archive_duration=1440)
-                await interaction.followup.send(f"Answered in {thread.mention}", ephemeral=True)
-                await send_maybe_file(thread.send, reply)
-                print(f"[discord] /ask replied in thread '{thread.name}' ({thread.id})")
+                print(f"[discord] /ask created reply thread '{thread.name}' ({thread.id})")
             except discord.Forbidden:
                 print("[discord] /ask thread reply failed: missing 'Create Public Threads' permission - "
                       "replying inline instead.")
-                thread = None
             except Exception as e:
                 print(f"[discord] /ask thread reply failed, replying inline instead: {e}")
-                thread = None
-        if thread is None:
+
+        key_cid = thread.id if thread else cid
+        prompt = f'[{interaction.user.display_name} asks via /ask]: {question}'
+        reply = await brain.ask(f"guild:{key_cid}", prompt,
+                                "discord_ask", interaction.user.display_name)
+        if not reply:
+            if thread:
+                await interaction.followup.send(f"Answered in {thread.mention}", ephemeral=True)
+                await send_maybe_file(thread.send, "(my AI brain is unreachable right now)")
+            else:
+                await interaction.followup.send("(my AI brain is unreachable right now)")
+            return
+
+        if thread:
+            await interaction.followup.send(f"Answered in {thread.mention}", ephemeral=True)
+            await send_maybe_file(thread.send, reply)
+        else:
             await send_maybe_file(interaction.followup.send, reply)
 
         await show_on_stream("discord", interaction.user.display_name, question, reply)
