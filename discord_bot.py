@@ -182,7 +182,9 @@ def create_bot(state, brain, broadcaster):
         cooldown = int(dcfg.get("replyCooldownSeconds", 8))
 
         if (mentioned or named or always) and channel_allowed(dcfg, cid):
-            if time.monotonic() - last_reply.get(cid, 0) < cooldown:
+            # the always-respond channel is a running conversation - never skip a
+            # message there due to cooldown, or the chat/memory loses turns
+            if not always and time.monotonic() - last_reply.get(cid, 0) < cooldown:
                 return
             last_reply[cid] = time.monotonic()
             clean = re.sub(rf"<@!?{bot.user.id}>", "Steve", text).strip()
@@ -409,7 +411,6 @@ def create_bot(state, brain, broadcaster):
             await interaction.response.send_message("Officers only.", ephemeral=True)
             return
         value = scope.value if scope else "all"
-        n = brain.reset(None if value == "all" else value)
         label = scope.name if scope else "everything"
         await interaction.response.send_message(
             f"Cleared **{label}** — {n} conversation(s) wiped.", ephemeral=True)
