@@ -183,16 +183,26 @@ def create_bot(state, brain, broadcaster):
         # ---- Server channels ----
         cid = message.channel.id
 
+        # a reply-thread Steve made off one of the configured
+        # threadReplyChannelIds is its own running conversation - once he's
+        # replied there, keep answering every message in it without needing
+        # the wake word/mention again
+        thread_ids = [str(i) for i in dcfg.get("threadReplyChannelIds", [])]
+        in_reply_thread = (isinstance(message.channel, discord.Thread)
+                           and str(getattr(message.channel, "parent_id", "")) in thread_ids)
+        check_cid = message.channel.parent_id if in_reply_thread else cid
+
         mentioned = bot.user in message.mentions
         named = dcfg.get("respondToName", True) and NAME_RE.match(text)
         always_id = str(dcfg.get("alwaysRespondChannelId", "") or "").strip()
         always = bool(always_id) and str(cid) == always_id
         cooldown = int(dcfg.get("replyCooldownSeconds", 8))
 
-        if (mentioned or named or always) and channel_allowed(dcfg, cid):
-            # the always-respond channel is a running conversation - never skip a
-            # message there due to cooldown, or the chat/memory loses turns
-            if not always and time.monotonic() - last_reply.get(cid, 0) < cooldown:
+        if (mentioned or named or always or in_reply_thread) and channel_allowed(dcfg, check_cid):
+            # the always-respond channel and Steve's own reply-threads are
+            # running conversations - never skip a message there due to
+            # cooldown, or the chat/memory loses turns
+            if not (always or in_reply_thread) and time.monotonic() - last_reply.get(cid, 0) < cooldown:
                 return
             last_reply[cid] = time.monotonic()
             clean = re.sub(rf"<@!?{bot.user.id}>", "Steve", text).strip()
