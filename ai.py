@@ -70,6 +70,17 @@ class Brain:
         cfg = load_config()
         ai_cfg = cfg.get("ai", {})
         system_prompt = self.state.system_prompt(cfg)
+
+        # the always-respond channel gets its own (funnier) personality,
+        # regardless of the casual/meeting mode toggle - everywhere else
+        # stays on the serious, web-search-leaning default prompt
+        dcfg = cfg.get("discord", {})
+        always_id = str(dcfg.get("alwaysRespondChannelId", "") or "").strip()
+        if always_id and key == f"guild:{always_id}":
+            fun_prompt = (dcfg.get("alwaysRespondSystemPrompt") or "").strip()
+            if fun_prompt:
+                system_prompt = fun_prompt
+
         history = self._history(key, int(ai_cfg.get("historyLength", 20)))
 
         # optional web access (config "web") - augmented prompt goes to the
@@ -109,7 +120,7 @@ class Brain:
             return None
         body = json.dumps({
             "model": ai_cfg.get("claudeModel", "claude-haiku-4-5-20251001"),
-            "max_tokens": 1024,
+            "max_tokens": int(ai_cfg.get("maxReplyTokens", 1024)),
             "system": system_prompt,
             "messages": messages,
         }).encode()
@@ -179,7 +190,10 @@ class Brain:
             "messages": [{"role": "system", "content": system_prompt}] + messages,
             "stream": False,
             "keep_alive": "60m",                  # keep the model loaded between replies
-            "options": {"num_predict": 200},      # replies are short; cap generation
+            "options": {
+                "num_predict": int(ai_cfg.get("maxReplyTokens", 700)),   # room for real answers/code
+                "num_ctx": int(ai_cfg.get("numCtx", 4096)),              # more context = remembers more
+            },
         }).encode()
         req = urllib.request.Request(url, data=body, method="POST")
         req.add_header("Content-Type", "application/json")

@@ -25,8 +25,10 @@ migrate_from_non_git() {
   mv "$HERE" "$BACKUP"
   git clone "$REPO_URL" "$NAME"
   cd "$NAME"
-  if [ -d "../$BACKUP/vosk-model-en-us-0.22-lgraph" ]; then
-    mv "../$BACKUP/vosk-model-en-us-0.22-lgraph" .
+  if [ -d "../$BACKUP/vosk-model-en-us-0.42-gigaspeech" ]; then
+    mv "../$BACKUP/vosk-model-en-us-0.42-gigaspeech" .
+  elif [ -d "../$BACKUP/vosk-model-en-us-0.22-lgraph" ]; then
+    mv "../$BACKUP/vosk-model-en-us-0.22-lgraph" .   # old smaller model - setup.sh will fetch the better one below
   fi
   if [ -f "../$BACKUP/config.json" ]; then
     cp config.example.json config.json
@@ -84,12 +86,17 @@ venv/bin/pip install --upgrade pip -q
 venv/bin/pip install -r requirements.txt -q
 
 echo "== speech model =="
-if [ ! -d "vosk-model-en-us-0.22-lgraph" ]; then
-  wget -q --show-progress https://alphacephei.com/vosk/models/vosk-model-en-us-0.22-lgraph.zip
-  unzip -q vosk-model-en-us-0.22-lgraph.zip
-  rm vosk-model-en-us-0.22-lgraph.zip
+# gigaspeech is Vosk's most accurate English model (~2.3GB) - worth the extra
+# download/RAM over the older lgraph model for real transcription quality
+if [ ! -d "vosk-model-en-us-0.42-gigaspeech" ]; then
+  wget -q --show-progress https://alphacephei.com/vosk/models/vosk-model-en-us-0.42-gigaspeech.zip
+  unzip -q vosk-model-en-us-0.42-gigaspeech.zip
+  rm vosk-model-en-us-0.42-gigaspeech.zip
 else
   echo "  (already present)"
+fi
+if [ -d "vosk-model-en-us-0.22-lgraph" ]; then
+  echo "  (old vosk-model-en-us-0.22-lgraph is no longer used - safe to delete: rm -rf vosk-model-en-us-0.22-lgraph)"
 fi
 
 echo "== config =="
