@@ -267,6 +267,8 @@
     </div>
     <label>Allowed chat channel IDs <span class="hint">(comma-separated, blank = all)</span></label>
     <input type="text" id="discord_chatChannelIds">
+    <label>Thread-reply channel IDs <span class="hint">(comma-separated — replies here go into a thread instead of the channel)</span></label>
+    <input type="text" id="discord_threadReplyChannelIds">
     <div class="row">
       <div class="checkline"><input type="checkbox" id="discord_onlyHomeChannels"><label for="discord_onlyHomeChannels">Only talk in home text channel</label></div>
       <div class="checkline"><input type="checkbox" id="discord_autoJoinVoice"><label for="discord_autoJoinVoice">Auto-join home voice channel</label></div>
@@ -383,6 +385,7 @@ async function loadConfig() {
   set('discord_homeTextChannelId', d.homeTextChannelId || '');
   set('discord_homeVoiceChannelId', d.homeVoiceChannelId || '');
   set('discord_chatChannelIds', (d.chatChannelIds || []).join(','));
+  set('discord_threadReplyChannelIds', (d.threadReplyChannelIds || []).join(','));
   setChecked('discord_onlyHomeChannels', d.onlyHomeChannels);
   setChecked('discord_autoJoinVoice', d.autoJoinVoice);
   setChecked('discord_respondToName', d.respondToName !== false);
@@ -427,6 +430,7 @@ async function saveConfig() {
       homeTextChannelId: val('discord_homeTextChannelId'),
       homeVoiceChannelId: val('discord_homeVoiceChannelId'),
       chatChannelIds: val('discord_chatChannelIds').split(',').map(s => s.trim()).filter(Boolean),
+      threadReplyChannelIds: val('discord_threadReplyChannelIds').split(',').map(s => s.trim()).filter(Boolean),
       onlyHomeChannels: checked('discord_onlyHomeChannels'),
       autoJoinVoice: checked('discord_autoJoinVoice'),
       respondToName: checked('discord_respondToName'),

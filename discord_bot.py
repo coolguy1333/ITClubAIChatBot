@@ -9,6 +9,8 @@
   /hallucination) and officer-only controls (/say, /meeting, /casual, /reset).
 """
 
+import datetime
+import io
 import re
 import time
 from collections import deque
@@ -21,6 +23,22 @@ from state import load_config
 from voice import VoiceManager
 
 NAME_RE = re.compile(r"\bsteve\b", re.IGNORECASE)
+DISCORD_SAFE_LEN = 1900   # leave headroom under Discord's 2000-char message cap
+
+
+async def send_maybe_file(send_func, text, **kwargs):
+    """Send text normally, or as a .txt attachment if it's too long for a
+    single Discord message (needs the 'Attach Files' permission)."""
+    if len(text) <= DISCORD_SAFE_LEN:
+        await send_func(text, **kwargs)
+        return
+    try:
+        buf = io.BytesIO(text.encode("utf-8"))
+        await send_func("(reply attached below - too long for one message)",
+                        file=discord.File(buf, filename="steve-reply.txt"), **kwargs)
+    except Exception as e:
+        print(f"[discord] couldn't attach long reply as a file ({e}) - sending truncated")
+        await send_func(text[:DISCORD_SAFE_LEN] + " …(truncated)", **kwargs)
 
 
 def create_bot(state, brain, broadcaster):
@@ -50,6 +68,24 @@ def create_bot(state, brain, broadcaster):
             "type": "steve", "source": source, "user": user,
             "question": question, "text": reply,
         })
+
+    async def deliver_reply(message, dcfg, cid, reply, name_hint, mention_reply):
+        """Send a reply either inline, or into a thread if this channel is
+        configured for it (discord.threadReplyChannelIds - needs the
+        'Create Public Threads' + 'Send Messages in Threads' permissions)."""
+        thread_ids = [str(i) for i in dcfg.get("threadReplyChannelIds", [])]
+        if str(cid) in thread_ids and not isinstance(message.channel, discord.Thread):
+            try:
+                name = (name_hint or reply)[:90].strip() or "steve"
+                thread = await message.create_thread(name=name)
+                await send_maybe_file(thread.send, reply)
+                return
+            except Exception as e:
+                print(f"[discord] thread reply failed, replying inline instead: {e}")
+        if mention_reply:
+            await send_maybe_file(message.reply, reply, mention_author=False)
+        else:
+            await send_maybe_file(message.channel.send, reply)
 
     @bot.event
     async def on_ready():
@@ -92,7 +128,7 @@ def create_bot(state, brain, broadcaster):
             async with message.channel.typing():
                 reply = await brain.ask(f"dm:{message.author.id}", prompt,
                                         "discord_dm", message.author.display_name)
-            await message.channel.send(reply or "(my AI brain is unreachable right now)")
+            await send_maybe_file(message.channel.send, reply or "(my AI brain is unreachable right now)")
             return  # DMs are private - never mirrored to the widget
 
         # ---- Server channels ----
@@ -118,7 +154,7 @@ def create_bot(state, brain, broadcaster):
                 reply = await brain.ask(f"guild:{cid}", prompt,
                                         "discord_chat", message.author.display_name)
             if reply:
-                await message.reply(reply, mention_author=False)
+                await deliver_reply(message, dcfg, cid, reply, clean, mention_reply=True)
                 await show_on_stream("discord", message.author.display_name, clean, reply)
                 voice_mgr.speak(message.guild.voice_client, reply)
             counters[cid] = 0
@@ -141,7 +177,7 @@ def create_bot(state, brain, broadcaster):
                   "like a friend hanging out in the chat. Don't address anyone as 'user'.]")
         reply = await brain.ask(f"guild:{cid}", prompt, "discord_auto", "community")
         if reply:
-            await message.channel.send(reply)
+            await deliver_reply(message, dcfg, cid, reply, "steve", mention_reply=False)
             await show_on_stream("discord", "community", "", reply)
 
     # ---------------- Slash commands ----------------
@@ -153,7 +189,7 @@ def create_bot(state, brain, broadcaster):
         prompt = f'[{interaction.user.display_name} asks via /ask]: {question}'
         reply = await brain.ask(f"guild:{interaction.channel_id}", prompt,
                                 "discord_ask", interaction.user.display_name)
-        await interaction.followup.send(reply or "(my AI brain is unreachable right now)")
+        await send_maybe_file(interaction.followup.send, reply or "(my AI brain is unreachable right now)")
         if reply:
             await show_on_stream("discord", interaction.user.display_name, question, reply)
             if interaction.guild:
@@ -184,6 +220,7 @@ def create_bot(state, brain, broadcaster):
             "In voice, say \"steve\" or \"hey steve\" before your question."
             f"{always_note}\n"
             "/ask <question> — ask me anything, anywhere\n"
+            "/poll <question> <options> — start a quick poll in this channel\n"
             "/status — what mode/model I'm running\n"
             "/join — pull me into your voice channel to listen and talk\n"
             "/leave — I'll head out of voice\n"
@@ -235,6 +272,30 @@ def create_bot(state, brain, broadcaster):
         voice_mgr.add_hallucination(target)
         await interaction.response.send_message(
             f'Got it — I\'ll ignore "{target}" from now on.', ephemeral=True)
+
+    @bot.tree.command(name="poll", description="Create a quick poll in this channel")
+    @app_commands.describe(question="The poll question", option1="First answer", option2="Second answer",
+                            option3="Third answer (optional)", option4="Fourth answer (optional)",
+                            hours="How long the poll runs, in hours (default 24)")
+    async def poll_cmd(interaction: discord.Interaction, question: str, option1: str, option2: str,
+                        option3: str = "", option4: str = "", hours: int = 24):
+        await interaction.response.defer()
+        duration = datetime.timedelta(hours=max(1, min(hours, 168)))
+        poll = discord.Poll(question=question, duration=duration)
+        poll.add_answer(text=option1)
+        poll.add_answer(text=option2)
+        if option3:
+            poll.add_answer(text=option3)
+        if option4:
+            poll.add_answer(text=option4)
+        try:
+            await interaction.channel.send(poll=poll)
+            await interaction.followup.send("Poll posted!", ephemeral=True)
+        except Exception as e:
+            print(f"[discord] poll error: {e}")
+            await interaction.followup.send(
+                "Couldn't post the poll — needs the 'Create Polls' permission and a recent discord.py.",
+                ephemeral=True)
 
     def officer_only(interaction):
         if not is_admin(interaction.user.id):
