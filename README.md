@@ -38,10 +38,12 @@ curl -fsSL https://raw.githubusercontent.com/coolguy1333/ITClubAIChatBot/main/se
 (or, if you've already cloned the repo, just `bash setup.sh` from inside it)
 
 That installs system + Python deps, grabs the Vosk speech model if it's not
-already there, creates `config.json` from `config.example.json`, and
-installs + enables a `steve` systemd service so it starts on boot and
-restarts on crash. Set your bot token and admin user ID at
-`http://127.0.0.1:8789/admin` (or edit `config.json` by hand), then:
+already there, creates `config.json` from `config.example.json`, binds the
+admin UI to this machine's LAN IP (not just `127.0.0.1`, so you can reach it
+from another device on the network), and installs + enables a `steve`
+systemd service so it starts on boot and restarts on crash. Set your bot
+token and admin user ID at `http://<this-machine's-LAN-IP>:8789/admin` (or
+edit `config.json` by hand), then:
 
 ```bash
 sudo systemctl start steve      # if it wasn't auto-started (no token set yet)
@@ -49,14 +51,15 @@ systemctl status steve          # check it's running
 journalctl -u steve -f          # tail its logs
 ```
 
-**Re-running `setup.sh` is safe and idempotent** — it detects what's already
-there and reinstalls/updates accordingly:
-- an existing git checkout → `git fetch` + `git reset --hard` to the latest, then reinstalls deps and the systemd service
-- an old/pre-cleanup install (e.g. still has `twitch.py`) → backs it up alongside itself, clones fresh, and carries over your bot token + Vosk model automatically
+**Every run of `setup.sh` pulls the latest code from GitHub first** — it's
+always safe to re-run to update or reinstall:
+- an existing git checkout → `git fetch` + `git reset --hard origin/main`, then reinstalls deps and the systemd service
+- anything else already there (an old pre-cleanup install, a non-git copy, whatever) → backs it up alongside itself, clones fresh from GitHub, and carries over your bot token + Vosk model automatically
 - nothing there yet → clones and installs from scratch
 
 So updating Steve to the latest version later is just: re-run the same
-one-liner.
+one-liner. Only your `config.json` and the Vosk model ever survive a
+re-run — the code itself always ends up matching GitHub.
 
 ## Manual setup (any OS, e.g. this Windows PC)
 

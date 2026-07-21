@@ -14,30 +14,23 @@ set -e
 REPO_URL="${STEVE_REPO_URL:-https://github.com/coolguy1333/ITClubAIChatBot.git}"
 DIR="steve"
 
-if [ -f "run.py" ]; then
-  # already sitting inside some kind of Steve checkout - figure out what
-  # kind and refresh it instead of assuming it's already good to go
-  if [ -d ".git" ]; then
-    echo "== existing git install detected - pulling latest and reinstalling =="
-    git fetch origin
-    git reset --hard origin/main
-  elif [ -f "twitch.py" ] || [ ! -f "config.example.json" ]; then
-    echo "== old-style Steve install detected here - migrating to a fresh clone =="
-    HERE="$(pwd)"
-    NAME="$(basename "$HERE")"
-    cd ..
-    BACKUP="${NAME}-old-$(date +%Y%m%d%H%M%S)"
-    mv "$HERE" "$BACKUP"
-    git clone "$REPO_URL" "$NAME"
-    cd "$NAME"
-    # reuse the Vosk model instead of re-downloading a gigabyte-plus
-    if [ -d "../$BACKUP/vosk-model-en-us-0.22-lgraph" ]; then
-      mv "../$BACKUP/vosk-model-en-us-0.22-lgraph" .
-    fi
-    # carry over the bot token and any other matching settings from the old config
-    if [ -f "../$BACKUP/config.json" ]; then
-      cp config.example.json config.json
-      python3 - "../$BACKUP/config.json" <<'PYEOF'
+migrate_from_non_git() {
+  # not a git checkout (old zip/manual install, or a non-git copy of the
+  # new code) - back it up, clone fresh from GitHub, and carry over the
+  # bot token + Vosk model so nothing has to be re-entered/re-downloaded
+  HERE="$(pwd)"
+  NAME="$(basename "$HERE")"
+  cd ..
+  BACKUP="${NAME}-old-$(date +%Y%m%d%H%M%S)"
+  mv "$HERE" "$BACKUP"
+  git clone "$REPO_URL" "$NAME"
+  cd "$NAME"
+  if [ -d "../$BACKUP/vosk-model-en-us-0.22-lgraph" ]; then
+    mv "../$BACKUP/vosk-model-en-us-0.22-lgraph" .
+  fi
+  if [ -f "../$BACKUP/config.json" ]; then
+    cp config.example.json config.json
+    python3 - "../$BACKUP/config.json" <<'PYEOF'
 import json, sys
 old = json.load(open(sys.argv[1]))
 new = json.load(open("config.json"))
@@ -51,10 +44,25 @@ merge(old, new)
 json.dump(new, open("config.json", "w"), indent=2)
 print("  carried over matching settings (including your bot token) from the old config.json")
 PYEOF
+  fi
+  echo "  old install backed up at: $(pwd)/../$BACKUP (delete it once you've confirmed the new one works)"
+}
+
+if [ -f "run.py" ]; then
+  # already sitting inside some kind of Steve checkout - every run pulls
+  # the latest from GitHub, one way or another, instead of trusting
+  # whatever's already on disk
+  if [ -d ".git" ]; then
+    echo "== existing git install detected - pulling latest from GitHub =="
+    if git fetch origin && git reset --hard origin/main; then
+      echo "  now on latest origin/main"
+    else
+      echo "  git pull failed (no network / repo issue?) - migrating to a fresh clone instead"
+      migrate_from_non_git
     fi
-    echo "  old install backed up at: $(pwd)/../$BACKUP (delete it once you've confirmed the new one works)"
   else
-    echo "== existing install detected - reinstalling in place =="
+    echo "== not a git checkout - migrating to a fresh clone from GitHub =="
+    migrate_from_non_git
   fi
 else
   echo "== cloning $REPO_URL =="
@@ -91,6 +99,24 @@ if [ ! -f "config.json" ]; then
   echo "  discord.adminUserId (via the admin UI once running, or by hand)"
 else
   echo "  (config.json already exists - leaving it alone)"
+fi
+
+echo "== network access =="
+# bind the admin UI / live display to this machine's LAN IP (not just
+# 127.0.0.1) so you can reach it from another device - fine on a trusted
+# home/club LAN, don't expose this port to the open internet
+LOCAL_IP="$(hostname -I 2>/dev/null | awk '{print $1}')"
+if [ -n "$LOCAL_IP" ]; then
+  python3 - "$LOCAL_IP" <<'PYEOF'
+import json, sys
+ip = sys.argv[1]
+cfg = json.load(open("config.json"))
+cfg.setdefault("widget", {})["bindHost"] = "0.0.0.0"
+json.dump(cfg, open("config.json", "w"), indent=2)
+print(f"  widget.bindHost set to 0.0.0.0 - reachable at http://{ip}:8789/admin")
+PYEOF
+else
+  echo "  couldn't detect a LAN IP - leave widget.bindHost as-is or set it by hand"
 fi
 
 echo "== auto-start on boot (systemd) =="
