@@ -57,8 +57,11 @@ async def main():
         tasks.append(bot.start(token))
     else:
         print("[discord] add a botToken to config.json and restart to go live")
-        return
+        print("[discord] the admin UI stays up either way - set it there, then restart")
 
+    # keep running even with no bot token - the admin UI (and widget) still
+    # need to stay up so you can set the token through the browser instead
+    # of editing config.json by hand and restarting blind
     await asyncio.gather(*tasks)
 
 

@@ -106,6 +106,15 @@ echo "== network access =="
 # 127.0.0.1) so you can reach it from another device - fine on a trusted
 # home/club LAN, don't expose this port to the open internet
 LOCAL_IP="$(hostname -I 2>/dev/null | awk '{print $1}')"
+if [ -z "$LOCAL_IP" ]; then
+  LOCAL_IP="$(ip -4 route get 1.1.1.1 2>/dev/null | awk '/src/{for(i=1;i<=NF;i++) if ($i=="src") print $(i+1)}')"
+fi
+if [ -z "$LOCAL_IP" ]; then
+  LOCAL_IP="$(ip -4 addr show scope global 2>/dev/null | awk '/inet /{print $2}' | cut -d/ -f1 | head -n1)"
+fi
+if [ -z "$LOCAL_IP" ]; then
+  LOCAL_IP="$(hostname -i 2>/dev/null | awk '{print $1}')"
+fi
 if [ -n "$LOCAL_IP" ]; then
   python3 - "$LOCAL_IP" <<'PYEOF'
 import json, sys
@@ -142,13 +151,11 @@ WantedBy=multi-user.target
 UNIT
   sudo systemctl daemon-reload
   sudo systemctl enable steve
-  if [ -s "config.json" ] && python3 -c "import json,sys; sys.exit(0 if json.load(open('config.json'))['discord']['botToken'] else 1)" 2>/dev/null; then
-    sudo systemctl restart steve
-    echo "  installed, enabled on boot, and (re)started as a systemd service: steve"
-  else
-    echo "  installed and enabled on boot as a systemd service: steve"
-    echo "  NOT starting it yet - config.json has no discord.botToken. Set one, then:"
-    echo "    sudo systemctl start steve"
+  sudo systemctl restart steve
+  echo "  installed, enabled on boot, and (re)started as a systemd service: steve"
+  if ! python3 -c "import json,sys; sys.exit(0 if json.load(open('config.json'))['discord']['botToken'] else 1)" 2>/dev/null; then
+    echo "  no discord.botToken set yet - the admin UI still runs, set it there, then:"
+    echo "    sudo systemctl restart steve"
   fi
   echo "  check status:  systemctl status steve"
   echo "  view logs:     journalctl -u steve -f"
