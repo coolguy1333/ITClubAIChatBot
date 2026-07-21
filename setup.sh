@@ -157,8 +157,9 @@ else
   echo "  (no systemd found - start manually with: venv/bin/python run.py, and re-run it after reboots)"
 fi
 
+ADMIN_HOST="${LOCAL_IP:-127.0.0.1}"
 echo
 echo "== done =="
-echo "admin UI + bot token / channel setup:  http://127.0.0.1:8789/admin"
+echo "admin UI + bot token / channel setup:  http://$ADMIN_HOST:8789/admin"
 echo "manual start (if not using systemd):   venv/bin/python run.py"
-echo "control panel (desktop, not headless):  venv/bin/python gui.py"
+echo "control panel (desktop only, needs a display - not this headless box):  venv/bin/python gui.py"
