@@ -85,7 +85,12 @@ def create_bot(state, brain, broadcaster):
     last_reply = {}   # channel_id -> monotonic time of last bot reply
 
     def is_admin(user_id):
-        return str(user_id) == load_config().get("discord", {}).get("adminUserId", "").strip()
+        # adminUserId can be one ID or a comma/space-separated list of IDs -
+        # every officer in the list gets officer-only commands (/say,
+        # /meeting, /casual, /reset) and the "(an officer)" attribution.
+        raw = load_config().get("discord", {}).get("adminUserId", "")
+        ids = {tok.strip() for tok in re.split(r"[,\s]+", raw) if tok.strip()}
+        return str(user_id) in ids
 
     def channel_allowed(dcfg, channel_id):
         # home lockdown: when enabled, Steve only talks in his home text channel
