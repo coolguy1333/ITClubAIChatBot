@@ -456,11 +456,15 @@ class VoiceManager:
             self._tts_engine = pyttsx3.init()
         return self._tts_engine
 
-    def _render_and_play(self, text, vc):
-        ffmpeg = shutil.which("ffmpeg")
-        if not ffmpeg:
-            print("[voice] ffmpeg not found - cannot speak")
-            return
+    def _synthesize(self, text, retry=True):
+        """Render text to a temp WAV, returning its path or None on failure.
+        pyttsx3's espeak driver on Linux occasionally has runAndWait() return
+        before the background synth thread has actually finished writing the
+        file (a known driver flakiness, independent of engine reuse) - that
+        shows up as a 0-byte file plus a harmless-but-noisy ReferenceError
+        from the stale callback. One immediate retry with a fresh engine
+        clears it almost every time instead of just silently dropping the
+        reply."""
         t0 = time.monotonic()
         engine = self._get_tts_engine()
         rate = float(self._vcfg.get("ttsRate", 1.0))
@@ -470,9 +474,24 @@ class VoiceManager:
         engine.save_to_file(text, tmp)
         engine.runAndWait()
         print(f"[timing] TTS render {time.monotonic()-t0:.1f}s")
-        if not os.path.exists(tmp) or os.path.getsize(tmp) == 0:
-            print("[voice] TTS produced no audio - resetting the TTS engine for next time")
-            self._tts_engine = None   # force a fresh engine next attempt instead of retrying a broken one
+        if os.path.exists(tmp) and os.path.getsize(tmp) > 0:
+            return tmp
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        print("[voice] TTS produced no audio - resetting the engine" + (" and retrying" if retry else ""))
+        self._tts_engine = None   # force a fresh engine, this one's in a bad state
+        return self._synthesize(text, retry=False) if retry else None
+
+    def _render_and_play(self, text, vc):
+        ffmpeg = shutil.which("ffmpeg")
+        if not ffmpeg:
+            print("[voice] ffmpeg not found - cannot speak")
+            return
+        tmp = self._synthesize(text)
+        if tmp is None:
+            print("[voice] TTS failed twice in a row - giving up on this reply")
             return
         if not vc.is_connected():
             os.unlink(tmp)
