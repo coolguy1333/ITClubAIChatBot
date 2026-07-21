@@ -20,7 +20,7 @@ import json
 cfg = json.load(open('config.json'))
 cfg['widget']['bindHost'] = '0.0.0.0'
 # the model ships inside this zip
-cfg['voice']['voskModelPath'] = 'vosk-model-en-us-0.22-lgraph'
+cfg['voice']['voskModelPath'] = 'vosk-model-en-us-0.42-gigaspeech'
 json.dump(cfg, open('config.json', 'w'), indent=2)
 print('config.json updated (bindHost=0.0.0.0, local vosk model)')
 EOF
