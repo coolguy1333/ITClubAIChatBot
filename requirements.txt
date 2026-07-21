@@ -1,5 +1,5 @@
 # AI Club Assistant (Steve)
-discord.py>=2.3.0
+discord.py>=2.4.0     # 2.4+ needed for voice channel status (VoiceChannel.edit(status=...))
 websockets>=12.0
 psutil>=5.9.0     # CPU/RAM stats for the admin UI (GPU/VRAM uses nvidia-smi if present)
 

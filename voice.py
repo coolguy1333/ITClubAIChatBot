@@ -299,12 +299,26 @@ class VoiceManager:
         self.reconnect_flags[channel.guild.id] = True
         bot.loop.create_task(self._reconnect_loop(bot, channel))
         print(f"[voice] joined {channel.name} ({channel.id})")
+        await self._set_channel_status(channel, "🎙️ Steve is listening")
         return vc
 
     async def leave(self, guild):
         self.reconnect_flags[guild.id] = False
         if guild.voice_client:
+            channel = guild.voice_client.channel
             await guild.voice_client.disconnect(force=True)
+            if channel:
+                await self._set_channel_status(channel, "")
+
+    async def _set_channel_status(self, channel, status):
+        """Best-effort: set the voice channel's status text (needs the 'Set
+        Voice Channel Status' permission). Silently no-ops if the discord.py
+        version doesn't support it or the bot lacks permission."""
+        try:
+            await channel.edit(status=status)
+        except Exception as e:
+            print(f"[voice] couldn't set channel status (needs 'Set Voice "
+                  f"Channel Status' permission + a recent discord.py): {e}")
 
     async def _reconnect_loop(self, bot, channel):
         await asyncio.sleep(5)

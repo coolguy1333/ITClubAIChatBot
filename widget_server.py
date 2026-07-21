@@ -12,7 +12,10 @@ they're set.
 import asyncio
 import copy
 import json
+import shutil
+import subprocess
 import threading
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer  # noqa: F401
 
 import websockets
@@ -21,6 +24,24 @@ from hwstats import get_hw_stats
 from state import BASE, CONFIG_PATH, load_config
 
 _SECRET_PATHS = (("discord", "botToken"), ("ai", "claudeApiKey"))
+
+
+def _restart_service(delay=1.0):
+    """Best-effort: ask systemd to restart the 'steve' service a moment
+    after this response goes out, so a new bot token actually takes effect
+    without anyone having to SSH in and run systemctl by hand. No-ops
+    quietly if this isn't running under systemd (e.g. on Windows/dev)."""
+    if not shutil.which("systemctl"):
+        return False
+
+    def worker():
+        time.sleep(delay)
+        try:
+            subprocess.run(["systemctl", "restart", "steve"], check=False, timeout=15)
+        except Exception as e:
+            print(f"[admin] auto-restart failed: {e}")
+    threading.Thread(target=worker, daemon=True).start()
+    return True
 
 
 def _redact_secrets(cfg):
@@ -219,8 +240,13 @@ class _WidgetHandler(BaseHTTPRequestHandler):
             if key:
                 cfg.setdefault("ai", {})["claudeApiKey"] = key
             _save_config(cfg)
-            self._ok(b'{"ok": true, "note": "restart Steve for a new bot token to take effect"}',
-                     "application/json")
+            note = "saved"
+            if token:
+                if _restart_service():
+                    note = "saved - restarting Steve now to pick up the new token"
+                else:
+                    note = "saved - restart Steve manually (not running under systemd) for the new token to take effect"
+            self._ok(json.dumps({"ok": True, "note": note}).encode(), "application/json")
         else:
             self.send_error(404)
 

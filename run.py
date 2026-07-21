@@ -52,16 +52,22 @@ async def main():
     ctx.voice_status = voice_status
     start_http_server(int(wcfg.get("httpPort", 8789)), ctx)
 
-    tasks = [broadcaster.serve(int(wcfg.get("wsPort", 8788)))]
-    if token:
-        tasks.append(bot.start(token))
-    else:
-        print("[discord] add a botToken to config.json and restart to go live")
-        print("[discord] the admin UI stays up either way - set it there, then restart")
+    async def run_discord():
+        """Never let a bad/missing/revoked token take down the whole
+        process - the admin UI and widget must stay reachable so it can be
+        fixed from the browser instead of requiring an SSH session."""
+        if not token:
+            print("[discord] no botToken in config.json - Discord disabled")
+            print("[discord] set one in the admin UI, then restart to go live")
+            return
+        try:
+            await bot.start(token)
+        except Exception as e:
+            print(f"[discord] failed to start: {e}")
+            print("[discord] check discord.botToken in the admin UI - it may be "
+                  "invalid, revoked, or regenerated on the Developer Portal")
 
-    # keep running even with no bot token - the admin UI (and widget) still
-    # need to stay up so you can set the token through the browser instead
-    # of editing config.json by hand and restarting blind
+    tasks = [broadcaster.serve(int(wcfg.get("wsPort", 8788))), run_discord()]
     await asyncio.gather(*tasks)
 
 
