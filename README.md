@@ -10,10 +10,12 @@ A single-process Discord bot that acts as an AI assistant for the IT Club.
   conversation memory. (This uses the official bot token, *not* a self-bot —
   self-bots are against Discord ToS and can get your personal account banned.)
 - **Server chat** — in server channels Steve answers @mentions and any
-  message containing "steve", and can auto-chime into conversation every
-  N messages. Designate one channel (`discord.alwaysRespondChannelId`) as a
-  dedicated Q&A channel where he answers every message — no name or /ask
-  needed.
+  message that *starts* with "steve" (`discord.respondToName`). Designate
+  one channel (`discord.alwaysRespondChannelId`) as a dedicated Q&A channel
+  where he answers every message — no name or /ask needed. Channels listed
+  in `discord.threadReplyChannelIds` get replies in a thread instead, and
+  every later message in that thread keeps getting answered without needing
+  the wake word again.
 - **Live display (optional)** — a small local webpage with a speech bubble
   + browser TTS that mirrors everything Steve says publicly (handy for a
   screen in the club room). Nothing here is Discord-specific; it's just an
@@ -24,7 +26,8 @@ A single-process Discord bot that acts as an AI assistant for the IT Club.
   — otherwise he just listens quietly. Replies through the AI and speaks
   back with TTS (pyttsx3 + ffmpeg). `/leave` to kick him out,
   `/hallucination` to teach him phrases that are actually mic noise.
-  Auto-reconnects if the connection drops.
+  Auto-reconnects if the connection drops, and auto-leaves once every human
+  has left the channel.
 - **System-prompt modes** — define as many modes as you like (a relaxed
   "casual" one, a focused "meeting" one for when club meetings are in session,
   anything else). Create/edit them with `/addprompt <name> <prompt>` and switch
@@ -85,8 +88,9 @@ It talks to the bot over the local control API on `127.0.0.1:8789`
 
 Config lives in `config.json` (hot-reloaded on most paths):
 - `discord.botToken` — your bot's token
-- `discord.adminUserId` — the Discord user ID of the club officer who gets
-  access to `/say`, `/meeting`, `/casual`, and `/reset`
+- `discord.adminUserId` — one Discord user ID, or several comma/space-
+  separated, of the club officer(s) who get access to `/say`, `/mode`,
+  `/addprompt`, and `/reset`
 - `ai.provider` — `"ollama"` (default, points at a local/LAN Ollama box) or
   `"claude"` (set `ai.claudeApiKey`)
 - `discord.chatChannelIds` — list of channel IDs Steve may talk in;
@@ -95,29 +99,33 @@ Config lives in `config.json` (hot-reloaded on most paths):
 ### Live display
 
 Open `http://127.0.0.1:8789/widget` in a browser (or add it as an OBS
-Browser Source if you stream meetings). Everything binds to 127.0.0.1 only,
-so nothing (including the bot token) is exposed to the network unless you
+Browser Source if you stream meetings). Binds to 127.0.0.1 only by default
+(`bash setup.sh` on Linux switches this to your LAN IP automatically), so
+nothing (including the bot token) is exposed to the network unless you
 change `widget.bindHost`.
 
 ### Admin UI
 
-Open `http://127.0.0.1:8789/admin` for a web page to edit config.json without
-touching the file directly: AI provider/model, system prompts for both
-modes, Discord channels and the officer's user ID, the wake-word/always-
-respond behavior, voice tuning, and the bot token / Claude key (write-only —
-they're never sent back to the browser). It also shows the last 50
-conversations (every exchange is logged to `chat_history.jsonl`, tagged with
-which channel/DM it came from) and live CPU/RAM/GPU/VRAM usage of the
-machine or LXC container Steve is running on (GPU needs `nvidia-smi`
-available in the container). Changes save immediately except the bot token,
-which needs a restart.
+Open `http://127.0.0.1:8789/admin` (or `http://<box's-LAN-IP>:8789/admin` if
+`widget.bindHost` is `0.0.0.0`) for a web page to edit config.json without
+touching the file directly: AI provider/model, system prompts for every
+mode (add/remove modes right there, or with `/addprompt` in Discord),
+Discord channels and officer user ID(s) — comma-separated for multiple
+officers — the wake-word/always-respond behavior, voice tuning, and the bot
+token / Claude key (write-only — they're never sent back to the browser).
+It also shows recent conversations with a search box (every exchange is
+logged to `chat_history.jsonl`, tagged with which channel/DM it came from)
+and live CPU/RAM/GPU/VRAM/power-draw usage — including cumulative energy
+used — of the machine or LXC container Steve is running on (GPU stats need
+`nvidia-smi` available in the container). Changes save immediately except
+the bot token, which needs a restart.
 
 ## Discord commands
 
 | Command | Who | Effect |
 | --- | --- | --- |
 | DM the bot | anyone (if `replyToAllDMs`) or the admin | Private chat with memory |
-| `@Steve ...` / "steve ..." | everyone | Reply in channel |
+| `@Steve ...` / message starting with "steve" | everyone | Reply in channel |
 | `/ask <q>` | everyone | Ask Steve a question (spoken too if he's in voice) |
 | `/help` | everyone | List what Steve can do |
 | `/status` | everyone | Mode, AI provider, voice status |
@@ -147,9 +155,14 @@ config.json      # your real configuration (token, prompts, ports) - gitignored,
 chat_history.jsonl  # append-only log of every exchange (created on first reply)
 ```
 
-## Ports (all 127.0.0.1 only)
+## Ports
+
+Both bind to `127.0.0.1` only by default — `bash setup.sh` on Linux switches
+`widget.bindHost` to `0.0.0.0` (this machine's LAN IP) automatically so the
+admin UI/live display are reachable from other devices; set it back to
+`127.0.0.1` if you don't want that.
 
 | Port | What |
 | --- | --- |
 | 8788 | WebSocket → live display (Steve's lines) |
-| 8789 | HTTP → serves `/widget` and `/widget-config` |
+| 8789 | HTTP → serves `/widget`, `/widget-config`, and `/admin` |

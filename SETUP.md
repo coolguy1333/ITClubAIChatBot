@@ -29,16 +29,19 @@ python -m pip install -r requirements.txt
 
 ## 3. The Vosk speech model
 
-Voice recognition uses a local Vosk model, shipped in this folder
-(`vosk-model-en-us-0.22-lgraph`). `config.json` already points at it:
+Voice recognition uses a local Vosk model — `setup.sh` downloads
+`vosk-model-en-us-0.42-gigaspeech` (Vosk's most accurate English model,
+~2.3GB) automatically. It's gitignored, not shipped in the repo, since it's
+too large to commit. `config.json` points at it by default:
 
 ```json
-"voice": { "voskModelPath": "./vosk-model-en-us-0.22-lgraph" }
+"voice": { "voskModelPath": "./vosk-model-en-us-0.42-gigaspeech" }
 ```
 
-If you move it, download the model from
+To use a different model instead, download it from
 https://alphacephei.com/vosk/models, unzip it anywhere, and update
-`voskModelPath` (absolute paths are fine).
+`voskModelPath` (absolute paths are fine, or set it via the admin UI's
+Voice & Wake Word panel — restart Steve after changing it).
 
 ## 4. Configure `config.json`
 
@@ -50,7 +53,7 @@ key setup below (do that first).
 | Field | What |
 | --- | --- |
 | `discord.botToken` | bot account token (from the [Discord Developer Portal](https://discord.com/developers/applications) → your app → Bot). Needs **Message Content** + **Voice States** intents enabled there. |
-| `discord.adminUserId` | the officer's Discord user ID — right-click yourself → Copy User ID (needs Developer Mode on). Gets access to `/say`, `/mode`, `/addprompt`, `/reset`. |
+| `discord.adminUserId` | one Discord user ID, or several separated by commas/spaces — right-click yourself → Copy User ID (needs Developer Mode on). Every ID listed gets access to `/say`, `/mode`, `/addprompt`, `/reset`. |
 | `discord.chatChannelIds` | `[]` = Steve may talk in any channel; or list specific channel IDs |
 | `discord.alwaysRespondChannelId` | one channel where Steve answers *every* message — no @mention, no "steve", no `/ask` needed. Good for a dedicated help channel. |
 
@@ -58,7 +61,7 @@ key setup below (do that first).
 | Field | What |
 | --- | --- |
 | `ai.provider` | `"ollama"` (local, default) or `"claude"` |
-| `ai.model` | Ollama model, e.g. `llama3.2:latest` (`ollama pull llama3.2` first) |
+| `ai.model` | Ollama model, e.g. `qwen2.5:3b-instruct` (default — good instruction-following on 4GB+ VRAM). Steve pulls it automatically on first use if it isn't already there. |
 | `ai.ollamaUrl` | `http://localhost:11434` on this PC |
 | `ai.claudeApiKey` | only if provider is `claude` — from console.anthropic.com |
 | `ai.systemPrompt` | base personality — already tuned for hardware/software/code/networking help |
@@ -142,10 +145,6 @@ calls, e.g. when chat prompt-injects him into PotatoGPT), `/hallucination
 [phrase]` (teach him a phrase is mic noise, e.g. breathing that transcribes
 as words), `/mode <name>` `/addprompt <name> <prompt>` (officer only).
 
-Steve also chimes into channel chatter on his own every ~6 messages
-(tune `discord.autoReactEveryMessages`; `discord.autoReactEnabled: false`
-turns it off).
-
 ## 8. Running on a VM
 
 The zip is fully self-contained — code + Vosk model + installer.
@@ -182,6 +181,16 @@ LAN on a VM — fine at home, don't port-forward it to the internet.
 | No sound from Steve in voice | ffmpeg missing from PATH, or no Windows SAPI voice installed |
 | Live display shows no dot | Steve isn't running, or the browser loaded the page before him — refresh |
 | Ports 8788/8789 busy | another Steve instance is running — close it (or the GUI is attached to it, which is fine) |
+| TTS silent/errors once in a while in voice | pyttsx3's espeak driver occasionally fails a render; Steve retries once automatically with a fresh engine before giving up on that reply |
+| Admin UI unreachable from another device | `widget.bindHost` needs to be `0.0.0.0` (setup.sh sets this automatically); also check any firewall between your device and the box |
+
+Other behavior worth knowing: Steve auto-leaves a voice channel once every
+human has left it (no point listening to silence); wake-word matching in
+text channels requires the message to *start* with "steve" (not just
+mention it anywhere), configurable via `discord.respondToName`; and any
+channel listed in `discord.threadReplyChannelIds` gets its replies in a
+thread, with every later message in that thread auto-answered without
+needing the wake word again.
 
 Voice tuning knobs (`config.json` → `voice`, or the admin UI): `energyThreshold`
 (default 200, higher = ignores quieter sounds), `pauseThreshold` (silence
