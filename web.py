@@ -84,7 +84,10 @@ def search_web(query, max_chars, timeout):
 def augment(prompt):
     """Return extra web context for this prompt, or None."""
     cfg = _cfg()
-    if not cfg.get("enabled", False):
+    # default true to match config.example.json and the admin UI's checkbox
+    # (both treat "unset" as enabled) - a config missing the web block
+    # entirely shouldn't silently disable web access
+    if not cfg.get("enabled", True):
         return None
     max_chars = int(cfg.get("maxChars", 2000))
     timeout = int(cfg.get("timeout", 10))

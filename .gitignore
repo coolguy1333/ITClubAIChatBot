@@ -13,5 +13,6 @@ __pycache__/
 venv/
 .venv/
 
-# large model download (fetched by setup.sh)
-vosk-model-en-us-0.22-lgraph/
+# large model download (fetched by setup.sh) - match any vosk model folder,
+# not just today's default, so switching models never risks committing 1-2GB+
+vosk-model-en-us-*/

@@ -87,7 +87,7 @@ def create_bot(state, brain, broadcaster):
     def is_admin(user_id):
         # adminUserId can be one ID or a comma/space-separated list of IDs -
         # every officer in the list gets officer-only commands (/say,
-        # /meeting, /casual, /reset) and the "(an officer)" attribution.
+        # /mode, /addprompt, /reset) and the "(an officer)" attribution.
         raw = load_config().get("discord", {}).get("adminUserId", "")
         ids = {tok.strip() for tok in re.split(r"[,\s]+", raw) if tok.strip()}
         return str(user_id) in ids
