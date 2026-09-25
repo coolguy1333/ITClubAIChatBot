@@ -5,7 +5,8 @@ Start it with:  python gui.py
 - Start/Stop Steve (runs run.py as a subprocess, live log below)
 - If Steve is already running elsewhere, the panel just attaches to it
 - Mode / voice indicators
-- Mode buttons (casual / meeting)
+- Mode buttons - dynamic, one per mode defined in config.json (add more
+  from Discord with /addprompt, or from the admin UI)
 - "Say" - push a line straight to the widget display/TTS
 - Chat tab - talk to Steve directly from the panel
 """
@@ -77,9 +78,9 @@ class SteveGUI:
         row = tk.Frame(root, bg=BG)
         row.pack(fill="x", padx=10, pady=4)
         tk.Label(row, text="Mode:", bg=BG, fg=FG).pack(side="left")
-        for mode in ("casual", "meeting"):
-            ttk.Button(row, text=mode, width=8,
-                       command=lambda m=mode: self.set_mode(m)).pack(side="left", padx=3)
+        self.mode_row = tk.Frame(row, bg=BG)
+        self.mode_row.pack(side="left")
+        self.mode_names = None   # None = not fetched yet; triggers first render
         tk.Label(row, text="   Say on stream:", bg=BG, fg=FG).pack(side="left")
         self.say_entry = tk.Entry(row, bg="#1c1c28", fg=FG, insertbackground=FG, width=30)
         self.say_entry.pack(side="left", fill="x", expand=True, padx=4)
@@ -115,6 +116,7 @@ class SteveGUI:
 
         self.root.after(200, self.drain_log)
         self.root.after(500, self.poll_status)
+        self.root.after(500, self.poll_modes)
 
     # ---- bot process ----
     def start_bot(self):
@@ -181,6 +183,27 @@ class SteveGUI:
             self.root.after(0, lambda: self.status_lbl.config(text=text, fg=color))
         threading.Thread(target=work, daemon=True).start()
         self.root.after(3000, self.poll_status)
+
+    # ---- mode buttons (dynamic - reflect whatever's in config.json) ----
+    def poll_modes(self):
+        def work():
+            try:
+                cfg = api_get("/admin/config", timeout=3)
+                names = sorted(k for k in (cfg.get("profiles") or {}) if k != "mode")
+            except Exception:
+                names = None   # leave whatever's currently shown alone on failure
+            if names is not None and names != self.mode_names:
+                self.root.after(0, lambda: self.rebuild_mode_buttons(names))
+        threading.Thread(target=work, daemon=True).start()
+        self.root.after(10000, self.poll_modes)
+
+    def rebuild_mode_buttons(self, names):
+        for w in self.mode_row.winfo_children():
+            w.destroy()
+        self.mode_names = names
+        for mode in names:
+            ttk.Button(self.mode_row, text=mode, width=8,
+                       command=lambda m=mode: self.set_mode(m)).pack(side="left", padx=3)
 
     # ---- controls ----
     def set_mode(self, mode):

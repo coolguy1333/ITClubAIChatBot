@@ -241,16 +241,11 @@
 
   <div class="modal" id="modal-profiles">
     <div class="modal-title">Personality Modes</div>
-    <div class="modal-desc">Toggle with /casual and /meeting in Discord, or set the default here.</div>
+    <div class="modal-desc">Switch with /mode &lt;name&gt; in Discord, or set the default here. Create new ones with /addprompt, or add one below.</div>
     <label>Active mode</label>
-    <select id="profiles_mode">
-      <option value="casual">casual</option>
-      <option value="meeting">meeting</option>
-    </select>
-    <label>Casual system prompt</label>
-    <textarea id="profiles_casual" rows="3"></textarea>
-    <label>Meeting system prompt</label>
-    <textarea id="profiles_meeting" rows="3"></textarea>
+    <select id="profiles_mode"></select>
+    <div id="profiles_list"></div>
+    <button class="secondary" onclick="addProfile()" type="button">+ Add mode</button>
     <div class="save-row">
       <button onclick="saveConfig()">Save changes</button>
       <button class="secondary" onclick="closeModal()">Cancel</button>
@@ -417,9 +412,7 @@ async function loadConfig() {
   set('ai_historyLength', ai.historyLength ?? 20);
   set('ai_systemPrompt', ai.systemPrompt || '');
 
-  set('profiles_mode', prof.mode || 'casual');
-  set('profiles_casual', (prof.casual || {}).systemPrompt || '');
-  set('profiles_meeting', (prof.meeting || {}).systemPrompt || '');
+  renderProfiles(prof);
 
   set('discord_adminUserId', d.adminUserId || '');
   set('discord_adminName', d.adminName || '');
@@ -451,6 +444,55 @@ async function loadConfig() {
   document.getElementById('key_state').textContent = secrets['ai.claudeApiKey'] ? 'set' : 'not set';
 }
 
+function renderProfiles(prof) {
+  // profiles are user-defined now (created via /addprompt or the button
+  // below) - "mode" itself just holds the name of the currently active one
+  const names = Object.keys(prof).filter(k => k !== 'mode').sort();
+  const select = document.getElementById('profiles_mode');
+  select.innerHTML = names.map(n => `<option value="${n}">${n}</option>`).join('');
+  select.value = names.includes(prof.mode) ? prof.mode : (names[0] || '');
+
+  const list = document.getElementById('profiles_list');
+  list.innerHTML = '';
+  names.forEach(name => {
+    const wrap = document.createElement('div');
+    wrap.dataset.profile = name;
+    wrap.innerHTML =
+      `<label>${name} system prompt <span class="hint">` +
+      `(<span style="cursor:pointer;color:#ff6675;" onclick="removeProfile('${name}')">remove</span>)</span></label>` +
+      `<textarea rows="3">${(prof[name] || {}).systemPrompt || ''}</textarea>`;
+    list.appendChild(wrap);
+  });
+}
+
+function addProfile() {
+  const name = (prompt('New mode name (e.g. hackathon):') || '').trim().toLowerCase();
+  if (!name || name === 'mode') return;
+  if (!CFG.profiles) CFG.profiles = {};
+  if (CFG.profiles[name]) { showMsg(`Mode "${name}" already exists.`, true); return; }
+  CFG.profiles[name] = { systemPrompt: '' };
+  renderProfiles(CFG.profiles);
+}
+
+function removeProfile(name) {
+  if (!confirm(`Remove mode "${name}"? This can't be undone until you save.`)) return;
+  const current = collectProfiles();
+  delete current[name];
+  if (!('mode' in current) || !(current.mode in current)) {
+    const remaining = Object.keys(current).filter(k => k !== 'mode');
+    current.mode = remaining[0] || '';
+  }
+  renderProfiles(current);
+}
+
+function collectProfiles() {
+  const out = { mode: val('profiles_mode') };
+  document.querySelectorAll('#profiles_list [data-profile]').forEach(wrap => {
+    out[wrap.dataset.profile] = { systemPrompt: wrap.querySelector('textarea').value };
+  });
+  return out;
+}
+
 function showMsg(text, isErr) {
   ['msg', 'msg2', 'msg3', 'msg4', 'msg5'].forEach(id => {
     const el = document.getElementById(id);
@@ -466,11 +508,7 @@ async function saveConfig() {
       ollamaUrl: val('ai_ollamaUrl'), historyLength: parseInt(val('ai_historyLength')) || 20,
       systemPrompt: val('ai_systemPrompt'),
     },
-    profiles: {
-      mode: val('profiles_mode'),
-      casual: { systemPrompt: val('profiles_casual') },
-      meeting: { systemPrompt: val('profiles_meeting') },
-    },
+    profiles: collectProfiles(),
     discord: {
       adminUserId: val('discord_adminUserId'), adminName: val('discord_adminName'),
       alwaysRespondChannelId: val('discord_alwaysRespondChannelId'),
