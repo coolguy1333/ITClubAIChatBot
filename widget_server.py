@@ -204,7 +204,10 @@ class _WidgetHandler(BaseHTTPRequestHandler):
 
         if self.path == "/control":
             mode = data.get("mode", "")
-            if mode not in ("casual", "meeting"):
+            # modes are user-defined now (via /addprompt), not just casual/meeting -
+            # validate against whatever's actually in config.profiles
+            valid_modes = [k for k in load_config().get("profiles", {}) if k != "mode"]
+            if mode not in valid_modes:
                 self.send_error(400)
                 return
             ctx.state.mode = mode
@@ -243,10 +246,17 @@ class _WidgetHandler(BaseHTTPRequestHandler):
             for section, key in _SECRET_PATHS:
                 data.get(section, {}).pop(key, None)
             cfg = load_config()
+            # "profiles" is a full replace, not a merge: the admin UI always
+            # sends its complete current set of modes, so this is the only
+            # way removing a mode there actually removes it from config.json
+            # (a deep-merge could only ever add/overwrite keys, never delete)
+            profiles_full = data.pop("profiles", None)
             _deep_merge(cfg, data)
+            if profiles_full is not None:
+                cfg["profiles"] = profiles_full
             _save_config(cfg)
-            if "profiles" in data and "mode" in data.get("profiles", {}):
-                ctx.state.mode = data["profiles"]["mode"]
+            if profiles_full and "mode" in profiles_full:
+                ctx.state.mode = profiles_full["mode"]
             self._ok(b'{"ok": true}', "application/json")
         elif self.path == "/admin/secrets":
             cfg = load_config()
